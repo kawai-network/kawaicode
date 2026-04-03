@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filepathext"
@@ -28,19 +28,19 @@ const ListMCPResourcesToolName = "list_mcp_resources"
 //go:embed list_mcp_resources.md
 var listMCPResourcesDescription []byte
 
-func NewListMCPResourcesTool(cfg *config.ConfigStore, permissions permission.Service) fantasy.AgentTool {
-	return fantasy.NewParallelAgentTool(
+func NewListMCPResourcesTool(cfg *config.ConfigStore, permissions permission.Service) unillm.AgentTool {
+	return unillm.NewParallelAgentTool(
 		ListMCPResourcesToolName,
 		string(listMCPResourcesDescription),
-		func(ctx context.Context, params ListMCPResourcesParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params ListMCPResourcesParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			params.MCPName = strings.TrimSpace(params.MCPName)
 			if params.MCPName == "" {
-				return fantasy.NewTextErrorResponse("mcp_name parameter is required"), nil
+				return unillm.NewTextErrorResponse("mcp_name parameter is required"), nil
 			}
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for listing MCP resources")
+				return unillm.ToolResponse{}, fmt.Errorf("session ID is required for listing MCP resources")
 			}
 
 			relPath := filepathext.SmartJoin(cfg.WorkingDir(), params.MCPName)
@@ -56,18 +56,18 @@ func NewListMCPResourcesTool(cfg *config.ConfigStore, permissions permission.Ser
 				},
 			)
 			if err != nil {
-				return fantasy.ToolResponse{}, err
+				return unillm.ToolResponse{}, err
 			}
 			if !p {
-				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+				return unillm.ToolResponse{}, permission.ErrorPermissionDenied
 			}
 
 			resources, err := mcp.ListResources(ctx, cfg, params.MCPName)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(err.Error()), nil
+				return unillm.NewTextErrorResponse(err.Error()), nil
 			}
 			if len(resources) == 0 {
-				return fantasy.NewTextResponse("No resources found"), nil
+				return unillm.NewTextResponse("No resources found"), nil
 			}
 
 			lines := make([]string, 0, len(resources))
@@ -93,7 +93,7 @@ func NewListMCPResourcesTool(cfg *config.ConfigStore, permissions permission.Ser
 			}
 
 			sort.Strings(lines)
-			return fantasy.NewTextResponse(strings.Join(lines, "\n")), nil
+			return unillm.NewTextResponse(strings.Join(lines, "\n")), nil
 		},
 	)
 }

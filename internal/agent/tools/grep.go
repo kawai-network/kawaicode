@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/fsext"
@@ -102,13 +102,13 @@ func escapeRegexPattern(pattern string) string {
 	return escaped
 }
 
-func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewGrepTool(workingDir string, config config.ToolGrep) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		GrepToolName,
 		string(grepDescription),
-		func(ctx context.Context, params GrepParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params GrepParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.Pattern == "" {
-				return fantasy.NewTextErrorResponse("pattern is required"), nil
+				return unillm.NewTextErrorResponse("pattern is required"), nil
 			}
 
 			searchPattern := params.Pattern
@@ -123,7 +123,7 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 
 			matches, truncated, err := searchFiles(searchCtx, searchPattern, searchPath, params.Include, 100)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("error searching files: %v", err)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("error searching files: %v", err)), nil
 			}
 
 			var output strings.Builder
@@ -161,8 +161,8 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 				}
 			}
 
-			return fantasy.WithResponseMetadata(
-				fantasy.NewTextResponse(output.String()),
+			return unillm.WithResponseMetadata(
+				unillm.NewTextResponse(output.String()),
 				GrepResponseMetadata{
 					NumberOfMatches: len(matches),
 					Truncated:       truncated,
@@ -199,7 +199,7 @@ func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]gr
 	}
 
 	// Only add ignore files if they exist
-	for _, ignoreFile := range []string{".gitignore", ".crushignore"} {
+	for _, ignoreFile := range []string{".gitignore", ".kawaiignore"} {
 		ignorePath := filepath.Join(path, ignoreFile)
 		if _, err := os.Stat(ignorePath); err == nil {
 			cmd.Args = append(cmd.Args, "--ignore-file", ignorePath)
@@ -279,7 +279,7 @@ func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error
 		}
 	}
 
-	// Create walker with gitignore and crushignore support
+	// Create walker with gitignore and kawaiignore support
 	walker := fsext.NewFastGlobWalker(rootPath)
 
 	err = filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {

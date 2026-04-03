@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
@@ -26,20 +26,20 @@ type JobKillResponseMetadata struct {
 	Description string `json:"description"`
 }
 
-func NewJobKillTool() fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewJobKillTool() unillm.AgentTool {
+	return unillm.NewAgentTool(
 		JobKillToolName,
 		string(jobKillDescription),
-		func(ctx context.Context, params JobKillParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params JobKillParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.ShellID == "" {
-				return fantasy.NewTextErrorResponse("missing shell_id"), nil
+				return unillm.NewTextErrorResponse("missing shell_id"), nil
 			}
 
 			bgManager := shell.GetBackgroundShellManager()
 
 			bgShell, ok := bgManager.Get(params.ShellID)
 			if !ok {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s", params.ShellID)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s", params.ShellID)), nil
 			}
 
 			metadata := JobKillResponseMetadata{
@@ -50,10 +50,10 @@ func NewJobKillTool() fantasy.AgentTool {
 
 			err := bgManager.Kill(params.ShellID)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(err.Error()), nil
+				return unillm.NewTextErrorResponse(err.Error()), nil
 			}
 
 			result := fmt.Sprintf("Background shell %s terminated successfully", params.ShellID)
-			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result), metadata), nil
+			return unillm.WithResponseMetadata(unillm.NewTextResponse(result), metadata), nil
 		})
 }

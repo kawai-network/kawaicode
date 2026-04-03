@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/filetracker"
@@ -49,22 +49,22 @@ func NewWriteTool(
 	files history.Service,
 	filetracker filetracker.Service,
 	workingDir string,
-) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		WriteToolName,
 		string(writeDescription),
-		func(ctx context.Context, params WriteParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params WriteParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.FilePath == "" {
-				return fantasy.NewTextErrorResponse("file_path is required"), nil
+				return unillm.NewTextErrorResponse("file_path is required"), nil
 			}
 
 			if params.Content == "" {
-				return fantasy.NewTextErrorResponse("content is required"), nil
+				return unillm.NewTextErrorResponse("content is required"), nil
 			}
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session_id is required")
+				return unillm.ToolResponse{}, fmt.Errorf("session_id is required")
 			}
 
 			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
@@ -72,27 +72,27 @@ func NewWriteTool(
 			fileInfo, err := os.Stat(filePath)
 			if err == nil {
 				if fileInfo.IsDir() {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
+					return unillm.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
 				}
 
 				modTime := fileInfo.ModTime().Truncate(time.Second)
 				lastRead := filetracker.LastReadTime(ctx, sessionID, filePath)
 				if modTime.After(lastRead) {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("File %s has been modified since it was last read.\nLast modification: %s\nLast read: %s\n\nPlease read the file again before modifying it.",
+					return unillm.NewTextErrorResponse(fmt.Sprintf("File %s has been modified since it was last read.\nLast modification: %s\nLast read: %s\n\nPlease read the file again before modifying it.",
 						filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339))), nil
 				}
 
 				oldContent, readErr := os.ReadFile(filePath)
 				if readErr == nil && string(oldContent) == params.Content {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("File %s already contains the exact content. No changes made.", filePath)), nil
+					return unillm.NewTextErrorResponse(fmt.Sprintf("File %s already contains the exact content. No changes made.", filePath)), nil
 				}
 			} else if !os.IsNotExist(err) {
-				return fantasy.ToolResponse{}, fmt.Errorf("error checking file: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("error checking file: %w", err)
 			}
 
 			dir := filepath.Dir(filePath)
 			if err = os.MkdirAll(dir, 0o755); err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error creating directory: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("error creating directory: %w", err)
 			}
 
 			oldContent := ""
@@ -125,15 +125,15 @@ func NewWriteTool(
 				},
 			)
 			if err != nil {
-				return fantasy.ToolResponse{}, err
+				return unillm.ToolResponse{}, err
 			}
 			if !p {
-				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+				return unillm.ToolResponse{}, permission.ErrorPermissionDenied
 			}
 
 			err = os.WriteFile(filePath, []byte(params.Content), 0o644)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error writing file: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("error writing file: %w", err)
 			}
 
 			// Check if file exists in history
@@ -142,7 +142,7 @@ func NewWriteTool(
 				_, err = files.Create(ctx, sessionID, filePath, oldContent)
 				if err != nil {
 					// Log error but don't fail the operation
-					return fantasy.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
+					return unillm.ToolResponse{}, fmt.Errorf("error creating file history: %w", err)
 				}
 			}
 			if file.Content != oldContent {
@@ -165,7 +165,7 @@ func NewWriteTool(
 			result := fmt.Sprintf("File successfully written: %s", filePath)
 			result = fmt.Sprintf("<result>\n%s\n</result>", result)
 			result += getDiagnostics(filePath, lspManager)
-			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result),
+			return unillm.WithResponseMetadata(unillm.NewTextResponse(result),
 				WriteResponseMetadata{
 					Diff:      diff,
 					Additions: additions,

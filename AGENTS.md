@@ -47,7 +47,7 @@ internal/
 
 ### Key Dependency Roles
 
-- **`charm.land/fantasy`**: LLM provider abstraction layer. Handles protocol
+- **`github.com/getkawai/unillm`**: LLM provider abstraction layer. Handles protocol
   differences between Anthropic, OpenAI, Gemini, etc. Used in `internal/app`
   and `internal/agent`.
 - **`charm.land/bubbletea/v2`**: TUI framework powering the interactive UI.

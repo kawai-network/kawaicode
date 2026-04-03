@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
@@ -30,19 +30,19 @@ type JobOutputResponseMetadata struct {
 	WorkingDirectory string `json:"working_directory"`
 }
 
-func NewJobOutputTool() fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewJobOutputTool() unillm.AgentTool {
+	return unillm.NewAgentTool(
 		JobOutputToolName,
 		string(jobOutputDescription),
-		func(ctx context.Context, params JobOutputParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params JobOutputParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.ShellID == "" {
-				return fantasy.NewTextErrorResponse("missing shell_id"), nil
+				return unillm.NewTextErrorResponse("missing shell_id"), nil
 			}
 
 			bgManager := shell.GetBackgroundShellManager()
 			bgShell, ok := bgManager.Get(params.ShellID)
 			if !ok {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s", params.ShellID)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s", params.ShellID)), nil
 			}
 
 			if params.Wait {
@@ -85,6 +85,6 @@ func NewJobOutputTool() fantasy.AgentTool {
 			}
 
 			result := fmt.Sprintf("Status: %s\n\n%s", status, output)
-			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result), metadata), nil
+			return unillm.WithResponseMetadata(unillm.NewTextResponse(result), metadata), nil
 		})
 }

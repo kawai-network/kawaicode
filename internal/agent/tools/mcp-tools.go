@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"slices"
 
-	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/getkawai/unillm"
 )
 
 // whitelistDockerTools contains Docker MCP tools that don't require permission.
@@ -44,14 +44,14 @@ type Tool struct {
 	cfg             *config.ConfigStore
 	permissions     permission.Service
 	workingDir      string
-	providerOptions fantasy.ProviderOptions
+	providerOptions unillm.ProviderOptions
 }
 
-func (m *Tool) SetProviderOptions(opts fantasy.ProviderOptions) {
+func (m *Tool) SetProviderOptions(opts unillm.ProviderOptions) {
 	m.providerOptions = opts
 }
 
-func (m *Tool) ProviderOptions() fantasy.ProviderOptions {
+func (m *Tool) ProviderOptions() unillm.ProviderOptions {
 	return m.providerOptions
 }
 
@@ -67,7 +67,7 @@ func (m *Tool) MCPToolName() string {
 	return m.tool.Name
 }
 
-func (m *Tool) Info() fantasy.ToolInfo {
+func (m *Tool) Info() unillm.ToolInfo {
 	parameters := make(map[string]any)
 	required := make([]string, 0)
 
@@ -88,7 +88,7 @@ func (m *Tool) Info() fantasy.ToolInfo {
 		}
 	}
 
-	return fantasy.ToolInfo{
+	return unillm.ToolInfo{
 		Name:        m.Name(),
 		Description: m.tool.Description,
 		Parameters:  parameters,
@@ -96,14 +96,16 @@ func (m *Tool) Info() fantasy.ToolInfo {
 	}
 }
 
-func (m *Tool) Run(ctx context.Context, params fantasy.ToolCall) (fantasy.ToolResponse, error) {
+func (m *Tool) Run(ctx context.Context, params unillm.ToolCall) (unillm.ToolResponse, error) {
 	sessionID := GetSessionFromContext(ctx)
 	if sessionID == "" {
-		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
+		return unillm.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
 	}
 
 	// Skip permission for whitelisted Docker MCP tools.
-	if !slices.Contains(whitelistDockerTools, params.Name) {
+	// Use the bound tool's actual name (m.Name()) instead of caller-supplied params.Name
+	// to prevent permission bypass via manipulated params.Name.
+	if !slices.Contains(whitelistDockerTools, m.Name()) {
 		permissionDescription := fmt.Sprintf("execute %s with the following parameters:", m.Info().Name)
 		p, err := m.permissions.Request(ctx,
 			permission.CreatePermissionRequest{
@@ -117,34 +119,27 @@ func (m *Tool) Run(ctx context.Context, params fantasy.ToolCall) (fantasy.ToolRe
 			},
 		)
 		if err != nil {
-			return fantasy.ToolResponse{}, err
+			return unillm.ToolResponse{}, err
 		}
 		if !p {
-			return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+			return unillm.ToolResponse{}, permission.ErrorPermissionDenied
 		}
 	}
 
 	result, err := mcp.RunTool(ctx, m.cfg, m.mcpName, m.tool.Name, params.Input)
 	if err != nil {
-		return fantasy.NewTextErrorResponse(err.Error()), nil
+		return unillm.NewTextErrorResponse(err.Error()), nil
 	}
 
 	switch result.Type {
 	case "image", "media":
 		if !GetSupportsImagesFromContext(ctx) {
 			modelName := GetModelNameFromContext(ctx)
-			return fantasy.NewTextErrorResponse(fmt.Sprintf("This model (%s) does not support image data.", modelName)), nil
+			return unillm.NewTextErrorResponse(fmt.Sprintf("This model (%s) does not support image data.", modelName)), nil
 		}
 
-		var response fantasy.ToolResponse
-		if result.Type == "image" {
-			response = fantasy.NewImageResponse(result.Data, result.MediaType)
-		} else {
-			response = fantasy.NewMediaResponse(result.Data, result.MediaType)
-		}
-		response.Content = result.Content
-		return response, nil
+		return newMediaToolResponse(result.Content, result.MediaType, result.Data), nil
 	default:
-		return fantasy.NewTextResponse(result.Content), nil
+		return unillm.NewTextResponse(result.Content), nil
 	}
 }

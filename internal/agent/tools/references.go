@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
@@ -33,28 +33,28 @@ const ReferencesToolName = "lsp_references"
 //go:embed references.md
 var referencesDescription []byte
 
-func NewReferencesTool(lspManager *lsp.Manager) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewReferencesTool(lspManager *lsp.Manager) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		ReferencesToolName,
 		string(referencesDescription),
-		func(ctx context.Context, params ReferencesParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params ReferencesParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.Symbol == "" {
-				return fantasy.NewTextErrorResponse("symbol is required"), nil
+				return unillm.NewTextErrorResponse("symbol is required"), nil
 			}
 
 			if lspManager.Clients().Len() == 0 {
-				return fantasy.NewTextErrorResponse("no LSP clients available"), nil
+				return unillm.NewTextErrorResponse("no LSP clients available"), nil
 			}
 
 			workingDir := cmp.Or(params.Path, ".")
 
 			matches, _, err := searchFiles(ctx, regexp.QuoteMeta(params.Symbol), workingDir, "", 100)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("failed to search for symbol: %s", err)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("failed to search for symbol: %s", err)), nil
 			}
 
 			if len(matches) == 0 {
-				return fantasy.NewTextResponse(fmt.Sprintf("Symbol '%s' not found", params.Symbol)), nil
+				return unillm.NewTextResponse(fmt.Sprintf("Symbol '%s' not found", params.Symbol)), nil
 			}
 
 			var allLocations []protocol.Location
@@ -80,13 +80,13 @@ func NewReferencesTool(lspManager *lsp.Manager) fantasy.AgentTool {
 
 			if len(allLocations) > 0 {
 				output := formatReferences(cleanupLocations(allLocations))
-				return fantasy.NewTextResponse(output), nil
+				return unillm.NewTextResponse(output), nil
 			}
 
 			if allErrs != nil {
-				return fantasy.NewTextErrorResponse(allErrs.Error()), nil
+				return unillm.NewTextErrorResponse(allErrs.Error()), nil
 			}
-			return fantasy.NewTextResponse(fmt.Sprintf("No references found for symbol '%s'", params.Symbol)), nil
+			return unillm.NewTextResponse(fmt.Sprintf("No references found for symbol '%s'", params.Symbol)), nil
 		})
 }
 

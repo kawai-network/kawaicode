@@ -2,7 +2,6 @@ package log
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"runtime/debug"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/event"
-	"github.com/charmbracelet/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -20,7 +18,7 @@ var (
 	initialized atomic.Bool
 )
 
-func Setup(logFile string, debug bool, ws ...io.Writer) {
+func Setup(logFile string, debug bool) {
 	initOnce.Do(func() {
 		logRotator := &lumberjack.Logger{
 			Filename:   logFile,
@@ -35,26 +33,12 @@ func Setup(logFile string, debug bool, ws ...io.Writer) {
 			level = slog.LevelDebug
 		}
 
-		opts := &slog.HandlerOptions{
+		logger := slog.NewJSONHandler(logRotator, &slog.HandlerOptions{
 			Level:     level,
 			AddSource: true,
-		}
+		})
 
-		var handlers []slog.Handler
-		handlers = append(handlers, slog.NewJSONHandler(logRotator, opts))
-
-		for _, w := range ws {
-			if w == nil {
-				continue
-			}
-			if f, ok := w.(term.File); ok && term.IsTerminal(f.Fd()) {
-				handlers = append(handlers, slog.NewTextHandler(w, opts))
-			} else {
-				handlers = append(handlers, slog.NewJSONHandler(w, opts))
-			}
-		}
-
-		slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
+		slog.SetDefault(slog.New(logger))
 		initialized.Store(true)
 	})
 }

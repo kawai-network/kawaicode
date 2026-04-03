@@ -7,16 +7,16 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
-	"github.com/charmbracelet/crush/internal/workspace"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
 
 // LSPInfo wraps LSP client information with diagnostic counts by severity.
 type LSPInfo struct {
-	workspace.LSPClientInfo
+	app.LSPClientInfo
 	Diagnostics map[protocol.DiagnosticSeverity]int
 }
 
@@ -25,18 +25,20 @@ type LSPInfo struct {
 func (m *UI) lspInfo(width, maxItems int, isSection bool) string {
 	t := m.com.Styles
 
-	states := slices.SortedFunc(maps.Values(m.lspStates), func(a, b workspace.LSPClientInfo) int {
+	states := slices.SortedFunc(maps.Values(m.lspStates), func(a, b app.LSPClientInfo) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 
 	var lsps []LSPInfo
 	for _, state := range states {
 		lspErrs := map[protocol.DiagnosticSeverity]int{}
-		counts := m.com.Workspace.LSPGetDiagnosticCounts(state.Name)
-		lspErrs[protocol.SeverityError] = counts.Error
-		lspErrs[protocol.SeverityWarning] = counts.Warning
-		lspErrs[protocol.SeverityHint] = counts.Hint
-		lspErrs[protocol.SeverityInformation] = counts.Information
+		if client, ok := m.com.App.LSPManager.Clients().Get(state.Name); ok {
+			counts := client.GetDiagnosticCounts()
+			lspErrs[protocol.SeverityError] = counts.Error
+			lspErrs[protocol.SeverityWarning] = counts.Warning
+			lspErrs[protocol.SeverityHint] = counts.Hint
+			lspErrs[protocol.SeverityInformation] = counts.Information
+		}
 
 		lsps = append(lsps, LSPInfo{LSPClientInfo: state, Diagnostics: lspErrs})
 	}

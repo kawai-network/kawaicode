@@ -2,12 +2,9 @@ package version
 
 import "runtime/debug"
 
-// Build-time parameters set via -ldflags.
+// Build-time parameters set via -ldflags
 
-var (
-	Version = "devel"
-	Commit  = "unknown"
-)
+var Version = "devel"
 
 // A user may install crush using `go install github.com/charmbracelet/crush@latest`.
 // without -ldflags, in which case the version above is unset. As a workaround

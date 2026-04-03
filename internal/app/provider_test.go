@@ -78,10 +78,10 @@ func setupMockProviders() map[string]config.ProviderConfig {
 			Name:   "OpenAI",
 			Models: []catwalk.Model{{ID: "gpt-4o"}, {ID: "gpt-4o-mini"}},
 		},
-		"anthropic": {
-			ID:     "anthropic",
-			Name:   "Anthropic",
-			Models: []catwalk.Model{{ID: "claude-3-sonnet"}, {ID: "claude-3-opus"}},
+		"openrouter": {
+			ID:     "openrouter",
+			Name:   "OpenRouter",
+			Models: []catwalk.Model{{ID: "moonshotai/kimi-k2-0905"}, {ID: "qwen/qwen3-coder"}},
 		},
 	}
 }
@@ -163,8 +163,8 @@ func TestFindModels(t *testing.T) {
 						ID:     "openai",
 						Models: []catwalk.Model{{ID: "shared-model"}},
 					},
-					"anthropic": {
-						ID:     "anthropic",
+					"openrouter": {
+						ID:     "openrouter",
 						Models: []catwalk.Model{{ID: "shared-model"}},
 					},
 				}

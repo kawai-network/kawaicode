@@ -2,7 +2,6 @@
 package home
 
 import (
-	"cmp"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -24,10 +23,13 @@ func Dir() string {
 
 // Config returns the user config directory.
 func Config() string {
-	return cmp.Or(
-		os.Getenv("XDG_CONFIG_HOME"),
-		filepath.Join(Dir(), ".config"),
-	)
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return xdg
+	}
+	if home := Dir(); home != "" {
+		return filepath.Join(home, ".config")
+	}
+	return ""
 }
 
 // Short replaces the actual home path from [Dir] with `~`.

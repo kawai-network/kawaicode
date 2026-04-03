@@ -18,10 +18,6 @@ func BenchmarkLoadFromConfigPaths(b *testing.B) {
 			"openai": {
 				"api_key": "$OPENAI_API_KEY",
 				"base_url": "https://api.openai.com/v1"
-			},
-			"anthropic": {
-				"api_key": "$ANTHROPIC_API_KEY",
-				"base_url": "https://api.anthropic.com"
 			}
 		},
 		"options": {

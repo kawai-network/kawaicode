@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/google"
-	"charm.land/fantasy/providers/openai"
+	"github.com/getkawai/unillm"
+	"github.com/getkawai/unillm/providers/google"
+	"github.com/getkawai/unillm/providers/openai"
 )
 
 type MessageRole string
@@ -460,11 +459,11 @@ func PromptWithTextAttachments(prompt string, attachments []Attachment) string {
 	return sb.String()
 }
 
-func (m *Message) ToAIMessage() []fantasy.Message {
-	var messages []fantasy.Message
+func (m *Message) ToAIMessage() []unillm.Message {
+	var messages []unillm.Message
 	switch m.Role {
 	case User:
-		var parts []fantasy.MessagePart
+		var parts []unillm.MessagePart
 		text := strings.TrimSpace(m.Content().Text)
 		var textAttachments []Attachment
 		for _, content := range m.BinaryContent() {
@@ -479,37 +478,32 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 		}
 		text = PromptWithTextAttachments(text, textAttachments)
 		if text != "" {
-			parts = append(parts, fantasy.TextPart{Text: text})
+			parts = append(parts, unillm.TextPart{Text: text})
 		}
 		for _, content := range m.BinaryContent() {
 			// skip text attachements
 			if strings.HasPrefix(content.MIMEType, "text/") {
 				continue
 			}
-			parts = append(parts, fantasy.FilePart{
+			parts = append(parts, unillm.FilePart{
 				Filename:  content.Path,
 				Data:      content.Data,
 				MediaType: content.MIMEType,
 			})
 		}
-		messages = append(messages, fantasy.Message{
-			Role:    fantasy.MessageRoleUser,
+		messages = append(messages, unillm.Message{
+			Role:    unillm.MessageRoleUser,
 			Content: parts,
 		})
 	case Assistant:
-		var parts []fantasy.MessagePart
+		var parts []unillm.MessagePart
 		text := strings.TrimSpace(m.Content().Text)
 		if text != "" {
-			parts = append(parts, fantasy.TextPart{Text: text})
+			parts = append(parts, unillm.TextPart{Text: text})
 		}
 		reasoning := m.ReasoningContent()
 		if reasoning.Thinking != "" {
-			reasoningPart := fantasy.ReasoningPart{Text: reasoning.Thinking, ProviderOptions: fantasy.ProviderOptions{}}
-			if reasoning.Signature != "" {
-				reasoningPart.ProviderOptions[anthropic.Name] = &anthropic.ReasoningOptionMetadata{
-					Signature: reasoning.Signature,
-				}
-			}
+			reasoningPart := unillm.ReasoningPart{Text: reasoning.Thinking, ProviderOptions: unillm.ProviderOptions{}}
 			if reasoning.ResponsesData != nil {
 				reasoningPart.ProviderOptions[openai.Name] = reasoning.ResponsesData
 			}
@@ -522,42 +516,42 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 			parts = append(parts, reasoningPart)
 		}
 		for _, call := range m.ToolCalls() {
-			parts = append(parts, fantasy.ToolCallPart{
+			parts = append(parts, unillm.ToolCallPart{
 				ToolCallID:       call.ID,
 				ToolName:         call.Name,
 				Input:            call.Input,
 				ProviderExecuted: call.ProviderExecuted,
 			})
 		}
-		messages = append(messages, fantasy.Message{
-			Role:    fantasy.MessageRoleAssistant,
+		messages = append(messages, unillm.Message{
+			Role:    unillm.MessageRoleAssistant,
 			Content: parts,
 		})
 	case Tool:
-		var parts []fantasy.MessagePart
+		var parts []unillm.MessagePart
 		for _, result := range m.ToolResults() {
-			var content fantasy.ToolResultOutputContent
+			var content unillm.ToolResultOutputContent
 			if result.IsError {
-				content = fantasy.ToolResultOutputContentError{
+				content = unillm.ToolResultOutputContentError{
 					Error: errors.New(result.Content),
 				}
 			} else if result.Data != "" {
-				content = fantasy.ToolResultOutputContentMedia{
+				content = unillm.ToolResultOutputContentMedia{
 					Data:      result.Data,
 					MediaType: result.MIMEType,
 				}
 			} else {
-				content = fantasy.ToolResultOutputContentText{
+				content = unillm.ToolResultOutputContentText{
 					Text: result.Content,
 				}
 			}
-			parts = append(parts, fantasy.ToolResultPart{
+			parts = append(parts, unillm.ToolResultPart{
 				ToolCallID: result.ToolCallID,
 				Output:     content,
 			})
 		}
-		messages = append(messages, fantasy.Message{
-			Role:    fantasy.MessageRoleTool,
+		messages = append(messages, unillm.Message{
+			Role:    unillm.MessageRoleTool,
 			Content: parts,
 		})
 	}

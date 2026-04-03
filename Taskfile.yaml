@@ -185,29 +185,16 @@ tasks:
       - git fetch --tags
 
   deps:
-    desc: Update Fantasy and Catwalk
+    desc: Update Unillm and Catwalk
     env:
       # The Go proxy takes a bit of time to see the latest release. Setting
       # these bypass it to ensure we can update to a release from a minute ago.
       GOPROXY: direct
       GONOSUMDB: charm.land/*
     cmds:
-      - go get charm.land/fantasy@latest
+      - go get github.com/getkawai/unillm@latest
       - go get charm.land/catwalk@latest
       - go mod tidy
-
-  swag:
-    desc: Generate OpenAPI spec from swag annotations
-    cmds:
-      - go run github.com/swaggo/swag/cmd/swag@v1.16.6 init --generalInfo main.go --dir . --output internal/swagger --packageName swagger --parseDependency --parseInternal --parseDepth 5
-    sources:
-      - internal/server/*.go
-      - internal/proto/*.go
-      - main.go
-    generates:
-      - internal/swagger/docs.go
-      - internal/swagger/swagger.json
-      - internal/swagger/swagger.yaml
 
   sqlc:
     desc: Generate code using SQLC

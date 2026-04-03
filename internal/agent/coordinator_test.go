@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,17 +15,20 @@ import (
 // mockSessionAgent is a minimal mock for the SessionAgent interface.
 type mockSessionAgent struct {
 	model     Model
-	runFunc   func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error)
+	runFunc   func(ctx context.Context, call SessionAgentCall) (*unillm.AgentResult, error)
 	cancelled []string
 }
 
-func (m *mockSessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+func (m *mockSessionAgent) Run(ctx context.Context, call SessionAgentCall) (*unillm.AgentResult, error) {
+	if m.runFunc == nil {
+		return nil, errors.New("mock runFunc not set")
+	}
 	return m.runFunc(ctx, call)
 }
 
 func (m *mockSessionAgent) Model() Model                        { return m.model }
 func (m *mockSessionAgent) SetModels(large, small Model)        {}
-func (m *mockSessionAgent) SetTools(tools []fantasy.AgentTool)  {}
+func (m *mockSessionAgent) SetTools(tools []unillm.AgentTool)  {}
 func (m *mockSessionAgent) SetSystemPrompt(systemPrompt string) {}
 func (m *mockSessionAgent) Cancel(sessionID string) {
 	m.cancelled = append(m.cancelled, sessionID)
@@ -36,7 +39,7 @@ func (m *mockSessionAgent) IsBusy() bool                                { return
 func (m *mockSessionAgent) QueuedPrompts(sessionID string) int          { return 0 }
 func (m *mockSessionAgent) QueuedPromptsList(sessionID string) []string { return nil }
 func (m *mockSessionAgent) ClearQueue(sessionID string)                 {}
-func (m *mockSessionAgent) Summarize(context.Context, string, fantasy.ProviderOptions) error {
+func (m *mockSessionAgent) Summarize(context.Context, string, unillm.ProviderOptions) error {
 	return nil
 }
 
@@ -52,7 +55,7 @@ func newTestCoordinator(t *testing.T, env fakeEnv, providerID string, providerCf
 }
 
 // newMockAgent creates a mockSessionAgent with the given provider and run function.
-func newMockAgent(providerID string, maxTokens int64, runFunc func(context.Context, SessionAgentCall) (*fantasy.AgentResult, error)) *mockSessionAgent {
+func newMockAgent(providerID string, maxTokens int64, runFunc func(context.Context, SessionAgentCall) (*unillm.AgentResult, error)) *mockSessionAgent {
 	return &mockSessionAgent{
 		model: Model{
 			CatwalkCfg: catwalk.Model{
@@ -67,11 +70,11 @@ func newMockAgent(providerID string, maxTokens int64, runFunc func(context.Conte
 }
 
 // agentResultWithText creates a minimal AgentResult with the given text response.
-func agentResultWithText(text string) *fantasy.AgentResult {
-	return &fantasy.AgentResult{
-		Response: fantasy.Response{
-			Content: fantasy.ResponseContent{
-				fantasy.TextContent{Text: text},
+func agentResultWithText(text string) *unillm.AgentResult {
+	return &unillm.AgentResult{
+		Response: unillm.Response{
+			Content: unillm.ResponseContent{
+				unillm.TextContent{Text: text},
 			},
 		},
 	}
@@ -88,7 +91,7 @@ func TestRunSubAgent(t *testing.T) {
 		parentSession, err := env.sessions.Create(t.Context(), "Parent")
 		require.NoError(t, err)
 
-		agent := newMockAgent(providerID, 4096, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		agent := newMockAgent(providerID, 4096, func(_ context.Context, call SessionAgentCall) (*unillm.AgentResult, error) {
 			assert.Equal(t, "do something", call.Prompt)
 			assert.Equal(t, int64(4096), call.MaxOutputTokens)
 			return agentResultWithText("done"), nil
@@ -124,7 +127,7 @@ func TestRunSubAgent(t *testing.T) {
 					MaxTokens: 8192,
 				},
 			},
-			runFunc: func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+			runFunc: func(_ context.Context, call SessionAgentCall) (*unillm.AgentResult, error) {
 				assert.Equal(t, int64(8192), call.MaxOutputTokens)
 				return agentResultWithText("ok"), nil
 			},
@@ -166,7 +169,7 @@ func TestRunSubAgent(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("provider not configured", func(t *testing.T) {
+	t.Run("provider not configured is ignored", func(t *testing.T) {
 		env := testEnv(t)
 		coord := newTestCoordinator(t, env, providerID, providerCfg)
 
@@ -174,9 +177,11 @@ func TestRunSubAgent(t *testing.T) {
 		require.NoError(t, err)
 
 		// Agent references a provider that doesn't exist in config.
-		agent := newMockAgent("unknown-provider", 4096, nil)
+		agent := newMockAgent("unknown-provider", 4096, func(_ context.Context, _ SessionAgentCall) (*unillm.AgentResult, error) {
+			return agentResultWithText("ok"), nil
+		})
 
-		_, err = coord.runSubAgent(t.Context(), subAgentParams{
+		resp, err := coord.runSubAgent(t.Context(), subAgentParams{
 			Agent:          agent,
 			SessionID:      parentSession.ID,
 			AgentMessageID: "msg-1",
@@ -184,8 +189,8 @@ func TestRunSubAgent(t *testing.T) {
 			Prompt:         "test",
 			SessionTitle:   "Test",
 		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "model provider not configured")
+		require.NoError(t, err)
+		assert.Equal(t, "ok", resp.Content)
 	})
 
 	t.Run("agent run error returns error response", func(t *testing.T) {
@@ -195,7 +200,7 @@ func TestRunSubAgent(t *testing.T) {
 		parentSession, err := env.sessions.Create(t.Context(), "Parent")
 		require.NoError(t, err)
 
-		agent := newMockAgent(providerID, 4096, func(_ context.Context, _ SessionAgentCall) (*fantasy.AgentResult, error) {
+		agent := newMockAgent(providerID, 4096, func(_ context.Context, _ SessionAgentCall) (*unillm.AgentResult, error) {
 			return nil, errors.New("agent exploded")
 		})
 
@@ -221,7 +226,7 @@ func TestRunSubAgent(t *testing.T) {
 		require.NoError(t, err)
 
 		var setupCalledWith string
-		agent := newMockAgent(providerID, 4096, func(_ context.Context, _ SessionAgentCall) (*fantasy.AgentResult, error) {
+		agent := newMockAgent(providerID, 4096, func(_ context.Context, _ SessionAgentCall) (*unillm.AgentResult, error) {
 			return agentResultWithText("ok"), nil
 		})
 
@@ -247,7 +252,7 @@ func TestRunSubAgent(t *testing.T) {
 		parentSession, err := env.sessions.Create(t.Context(), "Parent")
 		require.NoError(t, err)
 
-		agent := newMockAgent(providerID, 4096, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		agent := newMockAgent(providerID, 4096, func(ctx context.Context, call SessionAgentCall) (*unillm.AgentResult, error) {
 			// Simulate the agent incurring cost by updating the child session.
 			childSession, err := env.sessions.Get(ctx, call.SessionID)
 			if err != nil {

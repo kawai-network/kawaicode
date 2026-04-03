@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
@@ -24,17 +24,17 @@ const DiagnosticsToolName = "lsp_diagnostics"
 //go:embed diagnostics.md
 var diagnosticsDescription []byte
 
-func NewDiagnosticsTool(lspManager *lsp.Manager) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewDiagnosticsTool(lspManager *lsp.Manager) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		DiagnosticsToolName,
 		string(diagnosticsDescription),
-		func(ctx context.Context, params DiagnosticsParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params DiagnosticsParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if lspManager.Clients().Len() == 0 {
-				return fantasy.NewTextErrorResponse("no LSP clients available"), nil
+				return unillm.NewTextErrorResponse("no LSP clients available"), nil
 			}
 			notifyLSPs(ctx, lspManager, params.FilePath)
 			output := getDiagnostics(params.FilePath, lspManager)
-			return fantasy.NewTextResponse(output), nil
+			return unillm.NewTextResponse(output), nil
 		})
 }
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/lsp"
 )
 
@@ -24,13 +24,13 @@ type LSPRestartParams struct {
 	Name string `json:"name,omitempty"`
 }
 
-func NewLSPRestartTool(lspManager *lsp.Manager) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewLSPRestartTool(lspManager *lsp.Manager) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		LSPRestartToolName,
 		string(lspRestartDescription),
-		func(ctx context.Context, params LSPRestartParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params LSPRestartParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if lspManager.Clients().Len() == 0 {
-				return fantasy.NewTextErrorResponse("no LSP clients available to restart"), nil
+				return unillm.NewTextErrorResponse("no LSP clients available to restart"), nil
 			}
 
 			clientsToRestart := make(map[string]*lsp.Client)
@@ -39,7 +39,7 @@ func NewLSPRestartTool(lspManager *lsp.Manager) fantasy.AgentTool {
 			} else {
 				client, exists := lspManager.Clients().Get(params.Name)
 				if !exists {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("LSP client '%s' not found", params.Name)), nil
+					return unillm.NewTextErrorResponse(fmt.Sprintf("LSP client '%s' not found", params.Name)), nil
 				}
 				clientsToRestart[params.Name] = client
 			}
@@ -71,9 +71,9 @@ func NewLSPRestartTool(lspManager *lsp.Manager) fantasy.AgentTool {
 			}
 			if len(failed) > 0 {
 				output += fmt.Sprintf("Failed to restart %d LSP client(s): %s\n", len(failed), strings.Join(failed, ", "))
-				return fantasy.NewTextErrorResponse(output), nil
+				return unillm.NewTextErrorResponse(output), nil
 			}
 
-			return fantasy.NewTextResponse(output), nil
+			return unillm.NewTextResponse(output), nil
 		})
 }

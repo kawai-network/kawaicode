@@ -3,7 +3,7 @@ package agent
 import (
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/event"
 )
 
@@ -23,7 +23,7 @@ func (a *sessionAgent) eventPromptResponded(sessionID string, duration time.Dura
 	)
 }
 
-func (a *sessionAgent) eventTokensUsed(sessionID string, model Model, usage fantasy.Usage, cost float64) {
+func (a *sessionAgent) eventTokensUsed(sessionID string, model Model, usage unillm.Usage, cost float64) {
 	event.TokensUsed(
 		append(
 			a.eventCommon(sessionID, model),

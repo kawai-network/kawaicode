@@ -1,4 +1,4 @@
-// Package hyper provides a fantasy.Provider that proxies requests to Hyper.
+// Package hyper provides a unillm.Provider that proxies requests to Hyper.
 package hyper
 
 import (
@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
-	"charm.land/fantasy/object"
+	"github.com/getkawai/unillm"
+	"github.com/getkawai/unillm/object"
 	"github.com/charmbracelet/crush/internal/event"
 )
 
@@ -83,7 +83,7 @@ type options struct {
 type Option = func(*options)
 
 // New creates a new proxy provider.
-func New(opts ...Option) (fantasy.Provider, error) {
+func New(opts ...Option) (unillm.Provider, error) {
 	o := options{
 		baseURL: BaseURL() + "/api/v1/fantasy",
 		name:    Name,
@@ -125,8 +125,8 @@ type provider struct{ options options }
 
 func (p *provider) Name() string { return p.options.name }
 
-// LanguageModel implements fantasy.Provider.
-func (p *provider) LanguageModel(_ context.Context, modelID string) (fantasy.LanguageModel, error) {
+// LanguageModel implements unillm.Provider.
+func (p *provider) LanguageModel(_ context.Context, modelID string) (unillm.LanguageModel, error) {
 	if modelID == "" {
 		return nil, errors.New("missing model id")
 	}
@@ -139,21 +139,21 @@ type languageModel struct {
 	opts     options
 }
 
-// GenerateObject implements fantasy.LanguageModel.
-func (m *languageModel) GenerateObject(ctx context.Context, call fantasy.ObjectCall) (*fantasy.ObjectResponse, error) {
+// GenerateObject implements unillm.LanguageModel.
+func (m *languageModel) GenerateObject(ctx context.Context, call unillm.ObjectCall) (*unillm.ObjectResponse, error) {
 	return object.GenerateWithTool(ctx, m, call)
 }
 
-// StreamObject implements fantasy.LanguageModel.
-func (m *languageModel) StreamObject(ctx context.Context, call fantasy.ObjectCall) (fantasy.ObjectStreamResponse, error) {
+// StreamObject implements unillm.LanguageModel.
+func (m *languageModel) StreamObject(ctx context.Context, call unillm.ObjectCall) (unillm.ObjectStreamResponse, error) {
 	return object.StreamWithTool(ctx, m, call)
 }
 
 func (m *languageModel) Provider() string { return m.provider }
 func (m *languageModel) Model() string    { return m.modelID }
 
-// Generate implements fantasy.LanguageModel by calling the proxy JSON endpoint.
-func (m *languageModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
+// Generate implements unillm.LanguageModel by calling the proxy JSON endpoint.
+func (m *languageModel) Generate(ctx context.Context, call unillm.Call) (*unillm.Response, error) {
 	resp, err := m.doRequest(ctx, false, call)
 	if err != nil {
 		return nil, err
@@ -163,15 +163,15 @@ func (m *languageModel) Generate(ctx context.Context, call fantasy.Call) (*fanta
 		b, _ := ioReadAllLimit(resp.Body, 64*1024)
 		return nil, fmt.Errorf("proxy generate error: %s", strings.TrimSpace(string(b)))
 	}
-	var out fantasy.Response
+	var out unillm.Response
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// Stream implements fantasy.LanguageModel using SSE from the proxy.
-func (m *languageModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+// Stream implements unillm.LanguageModel using SSE from the proxy.
+func (m *languageModel) Stream(ctx context.Context, call unillm.Call) (unillm.StreamResponse, error) {
 	// Prefer explicit /stream endpoint
 	resp, err := m.doRequest(ctx, true, call)
 	if err != nil {
@@ -192,14 +192,14 @@ func (m *languageModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer func() { _ = resp.Body.Close() }()
 		b, _ := ioReadAllLimit(resp.Body, 64*1024)
-		return nil, &fantasy.ProviderError{
+		return nil, &unillm.ProviderError{
 			Title:      "Stream Error",
 			Message:    strings.TrimSpace(string(b)),
 			StatusCode: resp.StatusCode,
 		}
 	}
 
-	return func(yield func(fantasy.StreamPart) bool) {
+	return func(yield func(unillm.StreamPart) bool) {
 		defer func() { _ = resp.Body.Close() }()
 		scanner := bufio.NewScanner(resp.Body)
 		buf := make([]byte, 0, 64*1024)
@@ -215,11 +215,11 @@ func (m *languageModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.
 					event = ""
 					return true
 				}
-				var part fantasy.StreamPart
+				var part unillm.StreamPart
 				if err := json.Unmarshal(dataBuf.Bytes(), &part); err != nil {
-					return yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: err})
+					return yield(unillm.StreamPart{Type: unillm.StreamPartTypeError, Error: err})
 				}
-				if part.Type == fantasy.StreamPartTypeFinish {
+				if part.Type == unillm.StreamPartTypeFinish {
 					sawFinish = true
 				}
 				ok := yield(part)
@@ -256,23 +256,23 @@ func (m *languageModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.
 			if sawFinish && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				// If we already saw an explicit finish event, treat cancellation as a no-op.
 			} else {
-				_ = yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: err})
+				_ = yield(unillm.StreamPart{Type: unillm.StreamPartTypeError, Error: err})
 				return
 			}
 		}
 		if err := ctx.Err(); err != nil && !sawFinish {
-			_ = yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: err})
+			_ = yield(unillm.StreamPart{Type: unillm.StreamPartTypeError, Error: err})
 			return
 		}
 		// flush any pending data
 		_ = dispatch()
 		if !sawFinish {
-			_ = yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish})
+			_ = yield(unillm.StreamPart{Type: unillm.StreamPartTypeFinish})
 		}
 	}, nil
 }
 
-func (m *languageModel) doRequest(ctx context.Context, stream bool, call fantasy.Call) (*http.Response, error) {
+func (m *languageModel) doRequest(ctx context.Context, stream bool, call unillm.Call) (*http.Response, error) {
 	addr, err := url.Parse(m.opts.baseURL)
 	if err != nil {
 		return nil, err
@@ -321,8 +321,8 @@ func ioReadAllLimit(r io.Reader, n int64) ([]byte, error) {
 }
 
 func toProviderError(resp *http.Response, message string) error {
-	return &fantasy.ProviderError{
-		Title:      fantasy.ErrorTitleForStatusCode(resp.StatusCode),
+	return &unillm.ProviderError{
+		Title:      unillm.ErrorTitleForStatusCode(resp.StatusCode),
 		Message:    message,
 		StatusCode: resp.StatusCode,
 	}

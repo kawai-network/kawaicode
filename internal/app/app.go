@@ -16,7 +16,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
@@ -81,7 +81,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore) (*App, er
 	messages := message.NewService(q)
 	files := history.NewService(q, conn)
 	cfg := store.Config()
-	skipPermissionsRequests := store.Overrides().SkipPermissionRequests
+	skipPermissionsRequests := cfg.Permissions != nil && cfg.Permissions.SkipRequests
 	var allowedTools []string
 	if cfg.Permissions != nil && cfg.Permissions.AllowedTools != nil {
 		allowedTools = cfg.Permissions.AllowedTools
@@ -150,20 +150,6 @@ func (app *App) Config() *config.Config {
 // Store returns the config store.
 func (app *App) Store() *config.ConfigStore {
 	return app.config
-}
-
-// Events returns the events channel for the application.
-func (app *App) Events() <-chan tea.Msg {
-	return app.events
-}
-
-// SendEvent pushes a message into the application's events channel.
-// It is non-blocking; the message is dropped if the channel is full.
-func (app *App) SendEvent(msg tea.Msg) {
-	select {
-	case app.events <- msg:
-	default:
-	}
 }
 
 // AgentNotifications returns the broker for agent notification events.
@@ -288,7 +274,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	app.Permissions.AutoApproveSession(sess.ID)
 
 	type response struct {
-		result *fantasy.AgentResult
+		result *unillm.AgentResult
 		err    error
 	}
 	done := make(chan response, 1)

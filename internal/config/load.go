@@ -22,7 +22,9 @@ import (
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/home"
+	"github.com/charmbracelet/crush/internal/log"
 	powernapConfig "github.com/charmbracelet/x/powernap/pkg/config"
+	"github.com/kawai-network/y/paths"
 	"github.com/qjebbs/go-jsons"
 )
 
@@ -50,6 +52,12 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	if debug {
 		cfg.Options.Debug = true
 	}
+
+	// Setup logs
+	log.Setup(
+		filepath.Join(cfg.Options.DataDirectory, "logs", fmt.Sprintf("%s.log", appName)),
+		cfg.Options.Debug,
+	)
 
 	// Load workspace config last so it has highest priority.
 	if wsData, err := os.ReadFile(store.workspacePath); err == nil && len(wsData) > 0 {
@@ -228,13 +236,12 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 		}
 
 		switch {
-		case p.ID == catwalk.InferenceProviderAnthropic && config.OAuthToken != nil:
-			// Claude Code subscription is not supported anymore. Remove to show onboarding.
-			store.RemoveConfigField(ScopeGlobal, "providers.anthropic")
-			c.Providers.Del(string(p.ID))
-			continue
 		case p.ID == catwalk.InferenceProviderCopilot && config.OAuthToken != nil:
 			prepared.SetupGitHubCopilot()
+		case p.Type == catwalk.TypeAnthropic || p.Type == catwalk.TypeBedrock || p.ID == catwalk.InferenceProviderAzure:
+			slog.Warn("Skipping unsupported provider type", "provider", p.ID, "type", p.Type)
+			c.Providers.Del(string(p.ID))
+			continue
 		}
 
 		switch p.ID {
@@ -253,34 +260,6 @@ func (c *Config) configureProviders(store *ConfigStore, env env.Env, resolver Va
 			}
 			prepared.ExtraParams["project"] = project
 			prepared.ExtraParams["location"] = location
-		case catwalk.InferenceProviderAzure:
-			endpoint, err := resolver.ResolveValue(p.APIEndpoint)
-			if err != nil || endpoint == "" {
-				if configExists {
-					slog.Warn("Skipping Azure provider due to missing API endpoint", "provider", p.ID, "error", err)
-					c.Providers.Del(string(p.ID))
-				}
-				continue
-			}
-			prepared.BaseURL = endpoint
-			prepared.ExtraParams["apiVersion"] = env.Get("AZURE_OPENAI_API_VERSION")
-		case catwalk.InferenceProviderBedrock:
-			if !hasAWSCredentials(env) {
-				if configExists {
-					slog.Warn("Skipping Bedrock provider due to missing AWS credentials")
-					c.Providers.Del(string(p.ID))
-				}
-				continue
-			}
-			prepared.ExtraParams["region"] = env.Get("AWS_REGION")
-			if prepared.ExtraParams["region"] == "" {
-				prepared.ExtraParams["region"] = env.Get("AWS_DEFAULT_REGION")
-			}
-			for _, model := range p.Models {
-				if !strings.HasPrefix(model.ID, "anthropic.") {
-					return fmt.Errorf("bedrock provider only supports anthropic models for now, found: %s", model.ID)
-				}
-			}
 		default:
 			// if the provider api or endpoint are missing we skip them
 			v, err := resolver.ResolveValue(p.APIKey)
@@ -370,11 +349,7 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if dataDir != "" {
 		c.Options.DataDirectory = dataDir
 	} else if c.Options.DataDirectory == "" {
-		if path, ok := fsext.LookupClosest(workingDir, defaultDataDirectory); ok {
-			c.Options.DataDirectory = path
-		} else {
-			c.Options.DataDirectory = filepath.Join(workingDir, defaultDataDirectory)
-		}
+		c.Options.DataDirectory = paths.UserDataDir()
 	}
 	if c.Providers == nil {
 		c.Providers = csync.NewMap[string, ProviderConfig]()
@@ -739,26 +714,12 @@ func GlobalConfig() string {
 	if crushGlobal := os.Getenv("CRUSH_GLOBAL_CONFIG"); crushGlobal != "" {
 		return filepath.Join(crushGlobal, fmt.Sprintf("%s.json", appName))
 	}
-	return filepath.Join(home.Config(), appName, fmt.Sprintf("%s.json", appName))
-}
-
-// GlobalCacheDir returns the path to the global cache directory for the
-// application.
-func GlobalCacheDir() string {
-	if crushCache := os.Getenv("CRUSH_CACHE_DIR"); crushCache != "" {
-		return crushCache
+	cfgPath := home.Config()
+	if cfgPath == "" {
+		// No home directory available, return empty string
+		return ""
 	}
-	if xdgCacheHome := os.Getenv("XDG_CACHE_HOME"); xdgCacheHome != "" {
-		return filepath.Join(xdgCacheHome, appName)
-	}
-	if runtime.GOOS == "windows" {
-		localAppData := cmp.Or(
-			os.Getenv("LOCALAPPDATA"),
-			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
-		)
-		return filepath.Join(localAppData, appName, "cache")
-	}
-	return filepath.Join(home.Dir(), ".cache", appName)
+	return filepath.Join(cfgPath, appName, fmt.Sprintf("%s.json", appName))
 }
 
 // GlobalConfigData returns the path to the main data directory for the application.
@@ -785,15 +746,6 @@ func GlobalConfigData() string {
 	return filepath.Join(home.Dir(), ".local", "share", appName, fmt.Sprintf("%s.json", appName))
 }
 
-// GlobalWorkspaceDir returns the path to the global server workspace
-// directory. This directory acts as a meta-workspace for the server
-// process, giving it a real workingDir so that config loading, scoped
-// writes, and provider resolution behave identically to project
-// workspaces.
-func GlobalWorkspaceDir() string {
-	return filepath.Dir(GlobalConfigData())
-}
-
 func assignIfNil[T any](ptr **T, val T) {
 	if *ptr == nil {
 		*ptr = &val
@@ -817,9 +769,14 @@ func GlobalSkillsDirs() []string {
 		return []string{crushSkills}
 	}
 
-	paths := []string{
-		filepath.Join(home.Config(), appName, "skills"),
-		filepath.Join(home.Config(), "agents", "skills"),
+	cfgPath := home.Config()
+	paths := []string{}
+	// Only add config-based paths if config directory is available
+	if cfgPath != "" {
+		paths = append(paths,
+			filepath.Join(cfgPath, appName, "skills"),
+			filepath.Join(cfgPath, "agents", "skills"),
+		)
 	}
 
 	// On Windows, also load from app data on top of `$HOME/.config/crush`.

@@ -76,14 +76,14 @@ func TestRecordRecentModel_DedupeAndMoveToFront(t *testing.T) {
 
 	// Add two entries
 	require.NoError(t, store.recordRecentModel(ScopeGlobal, SelectedModelTypeLarge, SelectedModel{Provider: "openai", Model: "gpt-4o"}))
-	require.NoError(t, store.recordRecentModel(ScopeGlobal, SelectedModelTypeLarge, SelectedModel{Provider: "anthropic", Model: "claude"}))
+	require.NoError(t, store.recordRecentModel(ScopeGlobal, SelectedModelTypeLarge, SelectedModel{Provider: "openrouter", Model: "moonshotai/kimi-k2-0905"}))
 	// Re-add first; should move to front and not duplicate
 	require.NoError(t, store.recordRecentModel(ScopeGlobal, SelectedModelTypeLarge, SelectedModel{Provider: "openai", Model: "gpt-4o"}))
 
 	got := cfg.RecentModels[SelectedModelTypeLarge]
 	require.Len(t, got, 2)
 	require.Equal(t, SelectedModel{Provider: "openai", Model: "gpt-4o"}, got[0])
-	require.Equal(t, SelectedModel{Provider: "anthropic", Model: "claude"}, got[1])
+	require.Equal(t, SelectedModel{Provider: "openrouter", Model: "moonshotai/kimi-k2-0905"}, got[1])
 }
 
 func TestRecordRecentModel_TrimsToMax(t *testing.T) {
@@ -222,7 +222,7 @@ func TestRecordRecentModel_TypeIsolation(t *testing.T) {
 
 	// Add models to both large and small types
 	largeModel := SelectedModel{Provider: "openai", Model: "gpt-4o"}
-	smallModel := SelectedModel{Provider: "anthropic", Model: "claude"}
+	smallModel := SelectedModel{Provider: "openrouter", Model: "moonshotai/kimi-k2-0905"}
 
 	require.NoError(t, store.recordRecentModel(ScopeGlobal, SelectedModelTypeLarge, largeModel))
 	require.NoError(t, store.recordRecentModel(ScopeGlobal, SelectedModelTypeSmall, smallModel))
@@ -256,6 +256,6 @@ func TestRecordRecentModel_TypeIsolation(t *testing.T) {
 	small, ok := rm[string(SelectedModelTypeSmall)].([]any)
 	require.True(t, ok)
 	require.Len(t, small, 1)
-	require.Equal(t, "anthropic", small[0].(map[string]any)["provider"])
-	require.Equal(t, "claude", small[0].(map[string]any)["model"])
+	require.Equal(t, "openrouter", small[0].(map[string]any)["provider"])
+	require.Equal(t, "moonshotai/kimi-k2-0905", small[0].(map[string]any)["model"])
 }

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -79,19 +79,19 @@ func TestBashTool_CustomAutoBackgroundThreshold(t *testing.T) {
 	require.NoError(t, bgManager.Kill(meta.ShellID))
 }
 
-func newBashToolForTest(workingDir string) fantasy.AgentTool {
+func newBashToolForTest(workingDir string) unillm.AgentTool {
 	permissions := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
 	return NewBashTool(permissions, workingDir, attribution, "test-model")
 }
 
-func runBashTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, params BashParams) fantasy.ToolResponse {
+func runBashTool(t *testing.T, tool unillm.AgentTool, ctx context.Context, params BashParams) unillm.ToolResponse {
 	t.Helper()
 
 	input, err := json.Marshal(params)
 	require.NoError(t, err)
 
-	call := fantasy.ToolCall{
+	call := unillm.ToolCall{
 		ID:    "test-call",
 		Name:  BashToolName,
 		Input: string(input),

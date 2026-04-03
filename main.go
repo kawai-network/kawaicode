@@ -1,13 +1,3 @@
-// Package main is the entry point for the Crush CLI.
-//
-//	@title			Crush API
-//	@version		1.0
-//	@description	Crush is a terminal-based AI coding assistant. This API is served over a Unix socket (or Windows named pipe) and provides programmatic access to workspaces, sessions, agents, LSP, MCP, and more.
-//	@contact.name	Charm
-//	@contact.url	https://charm.sh
-//	@license.name	MIT
-//	@license.url	https://github.com/charmbracelet/crush/blob/main/LICENSE
-//	@BasePath		/v1
 package main
 
 import (
@@ -18,9 +8,17 @@ import (
 
 	"github.com/charmbracelet/crush/internal/cmd"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/kawai-network/y/paths"
 )
 
 func main() {
+	// Use local data directory in development, user path in production.
+	if os.Getenv("VERIDIUM_DEV") == "1" {
+		paths.SetDataDir("data")
+	} else {
+		paths.SetDataDir(paths.UserDataDir())
+	}
+
 	if os.Getenv("CRUSH_PROFILE") != "" {
 		go func() {
 			slog.Info("Serving pprof at localhost:6060")

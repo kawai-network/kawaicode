@@ -9,11 +9,6 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/openai"
-	"charm.land/fantasy/providers/openaicompat"
-	"charm.land/fantasy/providers/openrouter"
 	"charm.land/x/vcr"
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -26,6 +21,10 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/getkawai/unillm"
+	"github.com/getkawai/unillm/providers/openai"
+	"github.com/getkawai/unillm/providers/openaicompat"
+	"github.com/getkawai/unillm/providers/openrouter"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -42,7 +41,7 @@ type fakeEnv struct {
 	lspClients  *csync.Map[string, *lsp.Client]
 }
 
-type builderFunc func(t *testing.T, r *vcr.Recorder) (fantasy.LanguageModel, error)
+type builderFunc func(t *testing.T, r *vcr.Recorder) (unillm.LanguageModel, error)
 
 type modelPair struct {
 	name       string
@@ -50,21 +49,8 @@ type modelPair struct {
 	smallModel builderFunc
 }
 
-func anthropicBuilder(model string) builderFunc {
-	return func(t *testing.T, r *vcr.Recorder) (fantasy.LanguageModel, error) {
-		provider, err := anthropic.New(
-			anthropic.WithAPIKey(os.Getenv("CRUSH_ANTHROPIC_API_KEY")),
-			anthropic.WithHTTPClient(&http.Client{Transport: r}),
-		)
-		if err != nil {
-			return nil, err
-		}
-		return provider.LanguageModel(t.Context(), model)
-	}
-}
-
 func openaiBuilder(model string) builderFunc {
-	return func(t *testing.T, r *vcr.Recorder) (fantasy.LanguageModel, error) {
+	return func(t *testing.T, r *vcr.Recorder) (unillm.LanguageModel, error) {
 		provider, err := openai.New(
 			openai.WithAPIKey(os.Getenv("CRUSH_OPENAI_API_KEY")),
 			openai.WithHTTPClient(&http.Client{Transport: r}),
@@ -77,7 +63,7 @@ func openaiBuilder(model string) builderFunc {
 }
 
 func openRouterBuilder(model string) builderFunc {
-	return func(t *testing.T, r *vcr.Recorder) (fantasy.LanguageModel, error) {
+	return func(t *testing.T, r *vcr.Recorder) (unillm.LanguageModel, error) {
 		provider, err := openrouter.New(
 			openrouter.WithAPIKey(os.Getenv("CRUSH_OPENROUTER_API_KEY")),
 			openrouter.WithHTTPClient(&http.Client{Transport: r}),
@@ -90,7 +76,7 @@ func openRouterBuilder(model string) builderFunc {
 }
 
 func zAIBuilder(model string) builderFunc {
-	return func(t *testing.T, r *vcr.Recorder) (fantasy.LanguageModel, error) {
+	return func(t *testing.T, r *vcr.Recorder) (unillm.LanguageModel, error) {
 		provider, err := openaicompat.New(
 			openaicompat.WithBaseURL("https://api.z.ai/api/coding/paas/v4"),
 			openaicompat.WithAPIKey(os.Getenv("CRUSH_ZAI_API_KEY")),
@@ -138,7 +124,7 @@ func testEnv(t *testing.T) fakeEnv {
 	}
 }
 
-func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPrompt string, tools ...fantasy.AgentTool) SessionAgent {
+func testSessionAgent(env fakeEnv, large, small unillm.LanguageModel, systemPrompt string, tools ...unillm.AgentTool) SessionAgent {
 	largeModel := Model{
 		Model: large,
 		CatwalkCfg: catwalk.Model{
@@ -165,7 +151,7 @@ func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPro
 	return agent
 }
 
-func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel) (SessionAgent, error) {
+func coderAgent(r *vcr.Recorder, env fakeEnv, large, small unillm.LanguageModel) (SessionAgent, error) {
 	fixedTime := func() time.Time {
 		t, _ := time.Parse("1/2/2006", "1/1/2025")
 		return t
@@ -192,7 +178,6 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 
 	// Clear some fields to avoid issues with VCR cassette matching.
 	cfg.Config().Options.SkillsPaths = nil
-	cfg.Config().Options.DisabledSkills = []string{"crush-config"}
 	cfg.Config().Options.ContextPaths = nil
 	cfg.Config().LSP = nil
 
@@ -207,7 +192,7 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 		modelName = model.Name
 	}
 
-	allTools := []fantasy.AgentTool{
+	allTools := []unillm.AgentTool{
 		tools.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.Attribution, modelName),
 		tools.NewDownloadTool(env.permissions, env.workingDir, r.GetDefaultClient()),
 		tools.NewEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),

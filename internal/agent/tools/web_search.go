@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 )
 
 //go:embed web_search.md
 var webSearchToolDescription []byte
 
 // NewWebSearchTool creates a web search tool for sub-agents (no permissions needed).
-func NewWebSearchTool(client *http.Client) fantasy.AgentTool {
+func NewWebSearchTool(client *http.Client) unillm.AgentTool {
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.MaxIdleConns = 100
@@ -27,12 +27,12 @@ func NewWebSearchTool(client *http.Client) fantasy.AgentTool {
 		}
 	}
 
-	return fantasy.NewParallelAgentTool(
+	return unillm.NewParallelAgentTool(
 		WebSearchToolName,
 		string(webSearchToolDescription),
-		func(ctx context.Context, params WebSearchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params WebSearchParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.Query == "" {
-				return fantasy.NewTextErrorResponse("query is required"), nil
+				return unillm.NewTextErrorResponse("query is required"), nil
 			}
 
 			maxResults := params.MaxResults
@@ -47,9 +47,9 @@ func NewWebSearchTool(client *http.Client) fantasy.AgentTool {
 			results, err := searchDuckDuckGo(ctx, client, params.Query, maxResults)
 			slog.Debug("Web search completed", "query", params.Query, "results", len(results), "err", err)
 			if err != nil {
-				return fantasy.NewTextErrorResponse("Failed to search: " + err.Error()), nil
+				return unillm.NewTextErrorResponse("Failed to search: " + err.Error()), nil
 			}
 
-			return fantasy.NewTextResponse(formatSearchResults(results)), nil
+			return unillm.NewTextResponse(formatSearchResults(results)), nil
 		})
 }

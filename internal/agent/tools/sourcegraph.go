@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 )
 
 type SourcegraphParams struct {
@@ -31,7 +31,7 @@ const SourcegraphToolName = "sourcegraph"
 //go:embed sourcegraph.md
 var sourcegraphDescription []byte
 
-func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
+func NewSourcegraphTool(client *http.Client) unillm.AgentTool {
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.MaxIdleConns = 100
@@ -43,12 +43,12 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 			Transport: transport,
 		}
 	}
-	return fantasy.NewParallelAgentTool(
+	return unillm.NewParallelAgentTool(
 		SourcegraphToolName,
 		string(sourcegraphDescription),
-		func(ctx context.Context, params SourcegraphParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params SourcegraphParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.Query == "" {
-				return fantasy.NewTextErrorResponse("Query parameter is required"), nil
+				return unillm.NewTextErrorResponse("Query parameter is required"), nil
 			}
 
 			if params.Count <= 0 {
@@ -87,7 +87,7 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 
 			graphqlQueryBytes, err := json.Marshal(request)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to marshal GraphQL request: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to marshal GraphQL request: %w", err)
 			}
 			graphqlQuery := string(graphqlQueryBytes)
 
@@ -98,7 +98,7 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 				bytes.NewBuffer([]byte(graphqlQuery)),
 			)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to create request: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to create request: %w", err)
 			}
 
 			req.Header.Set("Content-Type", "application/json")
@@ -106,34 +106,34 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 
 			resp, err := client.Do(req)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to fetch URL: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to fetch URL: %w", err)
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				body, _ := io.ReadAll(resp.Body)
 				if len(body) > 0 {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d, response: %s", resp.StatusCode, string(body))), nil
+					return unillm.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d, response: %s", resp.StatusCode, string(body))), nil
 				}
 
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
 			}
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to read response body: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to read response body: %w", err)
 			}
 
 			var result map[string]any
 			if err = json.Unmarshal(body, &result); err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to unmarshal response: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to unmarshal response: %w", err)
 			}
 
 			formattedResults, err := formatSourcegraphResults(result, params.ContextWindow)
 			if err != nil {
-				return fantasy.NewTextErrorResponse("Failed to format results: " + err.Error()), nil
+				return unillm.NewTextErrorResponse("Failed to format results: " + err.Error()), nil
 			}
 
-			return fantasy.NewTextResponse(formattedResults), nil
+			return unillm.NewTextResponse(formattedResults), nil
 		})
 }
 

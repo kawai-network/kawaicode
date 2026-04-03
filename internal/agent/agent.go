@@ -12,24 +12,16 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/fantasy"
-	"charm.land/fantasy/providers/anthropic"
-	"charm.land/fantasy/providers/bedrock"
-	"charm.land/fantasy/providers/google"
-	"charm.land/fantasy/providers/openai"
-	"charm.land/fantasy/providers/openrouter"
-	"charm.land/fantasy/providers/vercel"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/notify"
@@ -42,8 +34,11 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/stringext"
-	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/exp/charmtone"
+	"github.com/getkawai/unillm"
+	"github.com/getkawai/unillm/providers/google"
+	"github.com/getkawai/unillm/providers/openai"
+	"github.com/getkawai/unillm/providers/openrouter"
 )
 
 const (
@@ -54,8 +49,6 @@ const (
 	largeContextWindowBuffer    = 20_000
 	smallContextWindowRatio     = 0.2
 )
-
-var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)
 
 //go:embed templates/title.md
 var titlePrompt []byte
@@ -69,7 +62,7 @@ var thinkTagRegex = regexp.MustCompile(`<think>.*?</think>`)
 type SessionAgentCall struct {
 	SessionID        string
 	Prompt           string
-	ProviderOptions  fantasy.ProviderOptions
+	ProviderOptions  unillm.ProviderOptions
 	Attachments      []message.Attachment
 	MaxOutputTokens  int64
 	Temperature      *float64
@@ -81,9 +74,9 @@ type SessionAgentCall struct {
 }
 
 type SessionAgent interface {
-	Run(context.Context, SessionAgentCall) (*fantasy.AgentResult, error)
+	Run(context.Context, SessionAgentCall) (*unillm.AgentResult, error)
 	SetModels(large Model, small Model)
-	SetTools(tools []fantasy.AgentTool)
+	SetTools(tools []unillm.AgentTool)
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
 	CancelAll()
@@ -92,12 +85,12 @@ type SessionAgent interface {
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
 	ClearQueue(sessionID string)
-	Summarize(context.Context, string, fantasy.ProviderOptions) error
+	Summarize(context.Context, string, unillm.ProviderOptions) error
 	Model() Model
 }
 
 type Model struct {
-	Model      fantasy.LanguageModel
+	Model      unillm.LanguageModel
 	CatwalkCfg catwalk.Model
 	ModelCfg   config.SelectedModel
 }
@@ -107,7 +100,7 @@ type sessionAgent struct {
 	smallModel         *csync.Value[Model]
 	systemPromptPrefix *csync.Value[string]
 	systemPrompt       *csync.Value[string]
-	tools              *csync.Slice[fantasy.AgentTool]
+	tools              *csync.Slice[unillm.AgentTool]
 
 	isSubAgent           bool
 	sessions             session.Service
@@ -130,7 +123,7 @@ type SessionAgentOptions struct {
 	IsYolo               bool
 	Sessions             session.Service
 	Messages             message.Service
-	Tools                []fantasy.AgentTool
+	Tools                []unillm.AgentTool
 	Notify               pubsub.Publisher[notify.Notification]
 }
 
@@ -154,7 +147,7 @@ func NewSessionAgent(
 	}
 }
 
-func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*unillm.AgentResult, error) {
 	if call.Prompt == "" && !message.ContainsTextAttachment(call.Attachments) {
 		return nil, ErrEmptyPrompt
 	}
@@ -195,15 +188,14 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 	}
 
 	if len(agentTools) > 0 {
-		// Add Anthropic caching to the last tool.
+		// Add cache control options (if any) to the last tool.
 		agentTools[len(agentTools)-1].SetProviderOptions(a.getCacheControlOptions())
 	}
 
-	agent := fantasy.NewAgent(
+	agent := unillm.NewAgent(
 		largeModel.Model,
-		fantasy.WithSystemPrompt(systemPrompt),
-		fantasy.WithTools(agentTools...),
-		fantasy.WithUserAgent(userAgent),
+		unillm.WithSystemPrompt(systemPrompt),
+		unillm.WithTools(agentTools...),
 	)
 
 	sessionLock := sync.Mutex{}
@@ -249,7 +241,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 
 	var currentAssistant *message.Message
 	var shouldSummarize bool
-	result, err := agent.Stream(genCtx, fantasy.AgentStreamCall{
+	result, err := agent.Stream(genCtx, unillm.AgentStreamCall{
 		Prompt:           message.PromptWithTextAttachments(call.Prompt, call.Attachments),
 		Files:            files,
 		Messages:         history,
@@ -260,7 +252,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 		PresencePenalty:  call.PresencePenalty,
 		TopK:             call.TopK,
 		FrequencyPenalty: call.FrequencyPenalty,
-		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+		PrepareStep: func(callContext context.Context, options unillm.PrepareStepFunctionOptions) (_ context.Context, prepared unillm.PrepareStepResult, err error) {
 			prepared.Messages = options.Messages
 			for i := range prepared.Messages {
 				prepared.Messages[i].ProviderOptions = nil
@@ -285,7 +277,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			systemMessageUpdated := false
 			for i, msg := range prepared.Messages {
 				// Only add cache control to the last message.
-				if msg.Role == fantasy.MessageRoleSystem {
+				if msg.Role == unillm.MessageRoleSystem {
 					lastSystemRoleInx = i
 				} else if !systemMessageUpdated {
 					prepared.Messages[lastSystemRoleInx].ProviderOptions = a.getCacheControlOptions()
@@ -298,7 +290,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			}
 
 			if promptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(promptPrefix)}, prepared.Messages...)
+				prepared.Messages = append([]unillm.Message{unillm.NewSystemMessage(promptPrefix)}, prepared.Messages...)
 			}
 
 			var assistantMsg message.Message
@@ -317,7 +309,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			currentAssistant = &assistantMsg
 			return callContext, prepared, err
 		},
-		OnReasoningStart: func(id string, reasoning fantasy.ReasoningContent) error {
+		OnReasoningStart: func(id string, reasoning unillm.ReasoningContent) error {
 			currentAssistant.AppendReasoningContent(reasoning.Text)
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
@@ -325,13 +317,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			currentAssistant.AppendReasoningContent(text)
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
-		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			// handle anthropic signature
-			if anthropicData, ok := reasoning.ProviderMetadata[anthropic.Name]; ok {
-				if reasoning, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok {
-					currentAssistant.AppendReasoningSignature(reasoning.Signature)
-				}
-			}
+		OnReasoningEnd: func(id string, reasoning unillm.ReasoningContent) error {
 			if googleData, ok := reasoning.ProviderMetadata[google.Name]; ok {
 				if reasoning, ok := googleData.(*google.ReasoningMetadata); ok {
 					currentAssistant.AppendThoughtSignature(reasoning.Signature, reasoning.ToolID)
@@ -368,10 +354,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			// even if the request is canceled mid-stream
 			return a.messages.Update(ctx, *currentAssistant)
 		},
-		OnRetry: func(err *fantasy.ProviderError, delay time.Duration) {
+		OnRetry: func(err *unillm.ProviderError, delay time.Duration) {
 			// TODO: implement
 		},
-		OnToolCall: func(tc fantasy.ToolCallContent) error {
+		OnToolCall: func(tc unillm.ToolCallContent) error {
 			toolCall := message.ToolCall{
 				ID:               tc.ToolCallID,
 				Name:             tc.ToolName,
@@ -384,7 +370,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			// even if the request is canceled mid-stream
 			return a.messages.Update(ctx, *currentAssistant)
 		},
-		OnToolResult: func(result fantasy.ToolResultContent) error {
+		OnToolResult: func(result unillm.ToolResultContent) error {
 			toolResult := a.convertToToolResult(result)
 			// Use parent ctx instead of genCtx to ensure the message is created
 			// even if the request is canceled mid-stream
@@ -396,14 +382,14 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			})
 			return createMsgErr
 		},
-		OnStepFinish: func(stepResult fantasy.StepResult) error {
+		OnStepFinish: func(stepResult unillm.StepResult) error {
 			finishReason := message.FinishReasonUnknown
 			switch stepResult.FinishReason {
-			case fantasy.FinishReasonLength:
+			case unillm.FinishReasonLength:
 				finishReason = message.FinishReasonMaxTokens
-			case fantasy.FinishReasonStop:
+			case unillm.FinishReasonStop:
 				finishReason = message.FinishReasonEndTurn
-			case fantasy.FinishReasonToolCalls:
+			case unillm.FinishReasonToolCalls:
 				finishReason = message.FinishReasonToolUse
 			}
 			currentAssistant.AddFinish(finishReason, "", "")
@@ -422,8 +408,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 			currentSession = updatedSession
 			return a.messages.Update(genCtx, *currentAssistant)
 		},
-		StopWhen: []fantasy.StopCondition{
-			func(_ []fantasy.StepResult) bool {
+		StopWhen: []unillm.StopCondition{
+			func(_ []unillm.StepResult) bool {
 				cw := int64(largeModel.CatwalkCfg.ContextWindow)
 				tokens := currentSession.CompletionTokens + currentSession.PromptTokens
 				remaining := cw - tokens
@@ -439,7 +425,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				}
 				return false
 			},
-			func(steps []fantasy.StepResult) bool {
+			func(steps []unillm.StepResult) bool {
 				return hasRepeatedToolCalls(steps, loopDetectionWindowSize, loopDetectionMaxRepeats)
 			},
 		},
@@ -511,8 +497,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 				return nil, createErr
 			}
 		}
-		var fantasyErr *fantasy.Error
-		var providerErr *fantasy.ProviderError
+		var fantasyErr *unillm.Error
+		var providerErr *unillm.ProviderError
 		const defaultTitle = "Provider Error"
 		linkStyle := lipgloss.NewStyle().Foreground(charmtone.Guac).Underline(true)
 		if isCancelErr {
@@ -590,7 +576,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (*fantasy
 	return a.Run(ctx, firstQueuedMessage)
 }
 
-func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions) error {
+func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts unillm.ProviderOptions) error {
 	if a.IsSessionBusy(sessionID) {
 		return ErrSessionBusy
 	}
@@ -619,9 +605,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	defer a.activeRequests.Del(sessionID)
 	defer cancel()
 
-	agent := fantasy.NewAgent(largeModel.Model,
-		fantasy.WithSystemPrompt(string(summaryPrompt)),
-		fantasy.WithUserAgent(userAgent),
+	agent := unillm.NewAgent(largeModel.Model,
+		unillm.WithSystemPrompt(string(summaryPrompt)),
 	)
 	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:             message.Assistant,
@@ -635,14 +620,14 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 
 	summaryPromptText := buildSummaryPrompt(currentSession.Todos)
 
-	resp, err := agent.Stream(genCtx, fantasy.AgentStreamCall{
+	resp, err := agent.Stream(genCtx, unillm.AgentStreamCall{
 		Prompt:          summaryPromptText,
 		Messages:        aiMsgs,
 		ProviderOptions: opts,
-		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+		PrepareStep: func(callContext context.Context, options unillm.PrepareStepFunctionOptions) (_ context.Context, prepared unillm.PrepareStepResult, err error) {
 			prepared.Messages = options.Messages
 			if systemPromptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
+				prepared.Messages = append([]unillm.Message{unillm.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
 			}
 			return callContext, prepared, nil
 		},
@@ -650,13 +635,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 			summaryMessage.AppendReasoningContent(text)
 			return a.messages.Update(genCtx, summaryMessage)
 		},
-		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			// Handle anthropic signature.
-			if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
-				if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
-					summaryMessage.AppendReasoningSignature(signature.Signature)
-				}
-			}
+		OnReasoningEnd: func(id string, reasoning unillm.ReasoningContent) error {
 			summaryMessage.FinishThinking()
 			return a.messages.Update(genCtx, summaryMessage)
 		},
@@ -704,21 +683,8 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	return err
 }
 
-func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
-	if t, _ := strconv.ParseBool(os.Getenv("CRUSH_DISABLE_ANTHROPIC_CACHE")); t {
-		return fantasy.ProviderOptions{}
-	}
-	return fantasy.ProviderOptions{
-		anthropic.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-		bedrock.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-		vercel.Name: &anthropic.ProviderCacheControlOptions{
-			CacheControl: anthropic.CacheControl{Type: "ephemeral"},
-		},
-	}
+func (a *sessionAgent) getCacheControlOptions() unillm.ProviderOptions {
+	return unillm.ProviderOptions{}
 }
 
 func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentCall) (message.Message, error) {
@@ -738,10 +704,10 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 	return msg, nil
 }
 
-func (a *sessionAgent) preparePrompt(msgs []message.Message, attachments ...message.Attachment) ([]fantasy.Message, []fantasy.FilePart) {
-	var history []fantasy.Message
+func (a *sessionAgent) preparePrompt(msgs []message.Message, attachments ...message.Attachment) ([]unillm.Message, []unillm.FilePart) {
+	var history []unillm.Message
 	if !a.isSubAgent {
-		history = append(history, fantasy.NewUserMessage(
+		history = append(history, unillm.NewUserMessage(
 			fmt.Sprintf("<system_reminder>%s</system_reminder>",
 				`This is a reminder that your todo list is currently empty. DO NOT mention this to the user explicitly because they are already aware.
 If you are working on tasks that would benefit from a todo list please use the "todos" tool to create one.
@@ -761,12 +727,12 @@ If not, please feel free to ignore. Again do not mention this message to the use
 		history = append(history, m.ToAIMessage()...)
 	}
 
-	var files []fantasy.FilePart
+	var files []unillm.FilePart
 	for _, attachment := range attachments {
 		if attachment.IsText() {
 			continue
 		}
-		files = append(files, fantasy.FilePart{
+		files = append(files, unillm.FilePart{
 			Filename:  attachment.FileName,
 			Data:      attachment.Content,
 			MediaType: attachment.MimeType,
@@ -813,21 +779,20 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 		maxOutputTokens = smallModel.CatwalkCfg.DefaultMaxTokens
 	}
 
-	newAgent := func(m fantasy.LanguageModel, p []byte, tok int64) fantasy.Agent {
-		return fantasy.NewAgent(m,
-			fantasy.WithSystemPrompt(string(p)+"\n /no_think"),
-			fantasy.WithMaxOutputTokens(tok),
-			fantasy.WithUserAgent(userAgent),
+	newAgent := func(m unillm.LanguageModel, p []byte, tok int64) unillm.Agent {
+		return unillm.NewAgent(m,
+			unillm.WithSystemPrompt(string(p)+"\n /no_think"),
+			unillm.WithMaxOutputTokens(tok),
 		)
 	}
 
-	streamCall := fantasy.AgentStreamCall{
+	streamCall := unillm.AgentStreamCall{
 		Prompt: fmt.Sprintf("Generate a concise title for the following content:\n\n%s\n <think>\n\n</think>", userPrompt),
-		PrepareStep: func(callCtx context.Context, opts fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+		PrepareStep: func(callCtx context.Context, opts unillm.PrepareStepFunctionOptions) (_ context.Context, prepared unillm.PrepareStepResult, err error) {
 			prepared.Messages = opts.Messages
 			if systemPromptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{
-					fantasy.NewSystemMessage(systemPromptPrefix),
+				prepared.Messages = append([]unillm.Message{
+					unillm.NewSystemMessage(systemPromptPrefix),
 				}, prepared.Messages...)
 			}
 			return callCtx, prepared, nil
@@ -918,7 +883,7 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 	}
 }
 
-func (a *sessionAgent) openrouterCost(metadata fantasy.ProviderMetadata) *float64 {
+func (a *sessionAgent) openrouterCost(metadata unillm.ProviderMetadata) *float64 {
 	openrouterMetadata, ok := metadata[openrouter.Name]
 	if !ok {
 		return nil
@@ -931,7 +896,7 @@ func (a *sessionAgent) openrouterCost(metadata fantasy.ProviderMetadata) *float6
 	return &opts.Usage.Cost
 }
 
-func (a *sessionAgent) updateSessionUsage(model Model, session *session.Session, usage fantasy.Usage, overrideCost *float64) {
+func (a *sessionAgent) updateSessionUsage(model Model, session *session.Session, usage unillm.Usage, overrideCost *float64) {
 	modelConfig := model.CatwalkCfg
 	cost := modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
 		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
@@ -1039,7 +1004,7 @@ func (a *sessionAgent) SetModels(large Model, small Model) {
 	a.smallModel.Set(small)
 }
 
-func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {
+func (a *sessionAgent) SetTools(tools []unillm.AgentTool) {
 	a.tools.SetSlice(tools)
 }
 
@@ -1051,8 +1016,29 @@ func (a *sessionAgent) Model() Model {
 	return a.largeModel.Get()
 }
 
-// convertToToolResult converts a fantasy tool result to a message tool result.
-func (a *sessionAgent) convertToToolResult(result fantasy.ToolResultContent) message.ToolResult {
+type toolMediaMetadata struct {
+	Kind      string `json:"kind"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+	Text      string `json:"text,omitempty"`
+}
+
+func parseToolMediaMetadata(metadata string) (toolMediaMetadata, bool) {
+	if metadata == "" {
+		return toolMediaMetadata{}, false
+	}
+	var payload toolMediaMetadata
+	if err := json.Unmarshal([]byte(metadata), &payload); err != nil {
+		return toolMediaMetadata{}, false
+	}
+	if payload.Kind != "media" || payload.MediaType == "" || payload.Data == "" {
+		return toolMediaMetadata{}, false
+	}
+	return payload, true
+}
+
+// convertToToolResult converts a unillm tool result to a message tool result.
+func (a *sessionAgent) convertToToolResult(result unillm.ToolResultContent) message.ToolResult {
 	baseResult := message.ToolResult{
 		ToolCallID: result.ToolCallID,
 		Name:       result.ToolName,
@@ -1060,22 +1046,27 @@ func (a *sessionAgent) convertToToolResult(result fantasy.ToolResultContent) mes
 	}
 
 	switch result.Result.GetType() {
-	case fantasy.ToolResultContentTypeText:
-		if r, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentText](result.Result); ok {
+	case unillm.ToolResultContentTypeText:
+		if r, ok := unillm.AsToolResultOutputType[unillm.ToolResultOutputContentText](result.Result); ok {
 			baseResult.Content = r.Text
+			if media, ok := parseToolMediaMetadata(result.ClientMetadata); ok {
+				if media.Text != "" {
+					baseResult.Content = media.Text
+				} else if baseResult.Content == "" {
+					baseResult.Content = fmt.Sprintf("Loaded %s content", media.MediaType)
+				}
+				baseResult.Data = media.Data
+				baseResult.MIMEType = media.MediaType
+			}
 		}
-	case fantasy.ToolResultContentTypeError:
-		if r, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentError](result.Result); ok {
+	case unillm.ToolResultContentTypeError:
+		if r, ok := unillm.AsToolResultOutputType[unillm.ToolResultOutputContentError](result.Result); ok {
 			baseResult.Content = r.Error.Error()
 			baseResult.IsError = true
 		}
-	case fantasy.ToolResultContentTypeMedia:
-		if r, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentMedia](result.Result); ok {
-			content := r.Text
-			if content == "" {
-				content = fmt.Sprintf("Loaded %s content", r.MediaType)
-			}
-			baseResult.Content = content
+	case unillm.ToolResultContentTypeMedia:
+		if r, ok := unillm.AsToolResultOutputType[unillm.ToolResultOutputContentMedia](result.Result); ok {
+			baseResult.Content = fmt.Sprintf("Loaded %s content", r.MediaType)
 			baseResult.Data = r.Data
 			baseResult.MIMEType = r.MediaType
 		}
@@ -1098,40 +1089,38 @@ func (a *sessionAgent) convertToToolResult(result fantasy.ToolResultContent) mes
 //  2. Inject a user message immediately after with the image as a file attachment
 //  3. This maintains the tool execution flow while working around API limitations
 //
-// Anthropic and Bedrock support images natively in tool results, so we skip
-// this workaround for them.
+// Some providers do not support sending media in tool results. We always apply
+// the workaround and attach media as a user message with file parts.
 //
 // Example transformation:
 //
 //	BEFORE: [tool result: image data]
 //	AFTER:  [tool result: "Image loaded - see attached"], [user: image attachment]
-func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Message, largeModel Model) []fantasy.Message {
-	providerSupportsMedia := largeModel.ModelCfg.Provider == string(catwalk.InferenceProviderAnthropic) ||
-		largeModel.ModelCfg.Provider == string(catwalk.InferenceProviderBedrock)
-
+func (a *sessionAgent) workaroundProviderMediaLimitations(messages []unillm.Message, largeModel Model) []unillm.Message {
+	providerSupportsMedia := false
 	if providerSupportsMedia {
 		return messages
 	}
 
-	convertedMessages := make([]fantasy.Message, 0, len(messages))
+	convertedMessages := make([]unillm.Message, 0, len(messages))
 
 	for _, msg := range messages {
-		if msg.Role != fantasy.MessageRoleTool {
+		if msg.Role != unillm.MessageRoleTool {
 			convertedMessages = append(convertedMessages, msg)
 			continue
 		}
 
-		textParts := make([]fantasy.MessagePart, 0, len(msg.Content))
-		var mediaFiles []fantasy.FilePart
+		textParts := make([]unillm.MessagePart, 0, len(msg.Content))
+		var mediaFiles []unillm.FilePart
 
 		for _, part := range msg.Content {
-			toolResult, ok := fantasy.AsMessagePart[fantasy.ToolResultPart](part)
+			toolResult, ok := unillm.AsMessagePart[unillm.ToolResultPart](part)
 			if !ok {
 				textParts = append(textParts, part)
 				continue
 			}
 
-			if media, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentMedia](toolResult.Output); ok {
+			if media, ok := unillm.AsToolResultOutputType[unillm.ToolResultOutputContentMedia](toolResult.Output); ok {
 				decoded, err := base64.StdEncoding.DecodeString(media.Data)
 				if err != nil {
 					slog.Warn("Failed to decode media data", "error", err)
@@ -1139,15 +1128,15 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 					continue
 				}
 
-				mediaFiles = append(mediaFiles, fantasy.FilePart{
+				mediaFiles = append(mediaFiles, unillm.FilePart{
 					Data:      decoded,
 					MediaType: media.MediaType,
 					Filename:  fmt.Sprintf("tool-result-%s", toolResult.ToolCallID),
 				})
 
-				textParts = append(textParts, fantasy.ToolResultPart{
+				textParts = append(textParts, unillm.ToolResultPart{
 					ToolCallID: toolResult.ToolCallID,
-					Output: fantasy.ToolResultOutputContentText{
+					Output: unillm.ToolResultOutputContentText{
 						Text: "[Image/media content loaded - see attached file]",
 					},
 					ProviderOptions: toolResult.ProviderOptions,
@@ -1157,13 +1146,13 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 			}
 		}
 
-		convertedMessages = append(convertedMessages, fantasy.Message{
-			Role:    fantasy.MessageRoleTool,
+		convertedMessages = append(convertedMessages, unillm.Message{
+			Role:    unillm.MessageRoleTool,
 			Content: textParts,
 		})
 
 		if len(mediaFiles) > 0 {
-			convertedMessages = append(convertedMessages, fantasy.NewUserMessage(
+			convertedMessages = append(convertedMessages, unillm.NewUserMessage(
 				"Here is the media content from the tool result:",
 				mediaFiles...,
 			))

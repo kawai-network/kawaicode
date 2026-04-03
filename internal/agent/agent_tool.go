@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"errors"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -23,7 +23,7 @@ const (
 	AgentToolName = "agent"
 )
 
-func (c *coordinator) agentTool(ctx context.Context) (fantasy.AgentTool, error) {
+func (c *coordinator) agentTool(ctx context.Context) (unillm.AgentTool, error) {
 	agentCfg, ok := c.cfg.Config().Agents[config.AgentTask]
 	if !ok {
 		return nil, errors.New("task agent not configured")
@@ -37,22 +37,22 @@ func (c *coordinator) agentTool(ctx context.Context) (fantasy.AgentTool, error) 
 	if err != nil {
 		return nil, err
 	}
-	return fantasy.NewParallelAgentTool(
+	return unillm.NewParallelAgentTool(
 		AgentToolName,
 		string(agentToolDescription),
-		func(ctx context.Context, params AgentParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params AgentParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.Prompt == "" {
-				return fantasy.NewTextErrorResponse("prompt is required"), nil
+				return unillm.NewTextErrorResponse("prompt is required"), nil
 			}
 
 			sessionID := tools.GetSessionFromContext(ctx)
 			if sessionID == "" {
-				return fantasy.ToolResponse{}, errors.New("session id missing from context")
+				return unillm.ToolResponse{}, errors.New("session id missing from context")
 			}
 
 			agentMessageID := tools.GetMessageFromContext(ctx)
 			if agentMessageID == "" {
-				return fantasy.ToolResponse{}, errors.New("agent message id missing from context")
+				return unillm.ToolResponse{}, errors.New("agent message id missing from context")
 			}
 
 			return c.runSubAgent(ctx, subAgentParams{

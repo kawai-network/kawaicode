@@ -187,7 +187,7 @@ brews:
   - repository:
       owner: charmbracelet
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GH_TOKEN }}"
     skip_upload: "{{ with .Prerelease }}true{{ end }}"
     commit_author:
       name: "Charm"
@@ -203,7 +203,7 @@ scoops:
   - repository:
       owner: charmbracelet
       name: scoop-bucket
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GH_TOKEN }}"
     skip_upload: "{{ with .Prerelease }}true{{ end }}"
     commit_author:
       name: "Charm"
@@ -263,7 +263,7 @@ nix:
   - repository:
       owner: "charmbracelet"
       name: nur
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GH_TOKEN }}"
     commit_author:
       name: "Charm"
       email: "charmcli@users.noreply.github.com"
@@ -287,7 +287,7 @@ winget:
     repository:
       owner: "charmbracelet"
       name: winget-pkgs
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GH_TOKEN }}"
       branch: "crush-{{.Version}}"
       pull_request:
         enabled: true

@@ -82,6 +82,8 @@ func DockerMCPConfig() MCPConfig {
 
 // PrepareDockerMCPConfig validates Docker MCP availability and stages the
 // Docker MCP configuration in memory.
+// Note: This modifies in-memory config directly. For atomic enable+persist,
+// use EnableDockerMCP instead.
 func (s *ConfigStore) PrepareDockerMCPConfig() (MCPConfig, error) {
 	if !IsDockerMCPAvailable() {
 		return MCPConfig{}, fmt.Errorf("docker mcp is not available, please ensure docker is installed and 'docker mcp version' succeeds")
@@ -105,14 +107,31 @@ func (s *ConfigStore) PersistDockerMCPConfig(mcpConfig MCPConfig) error {
 }
 
 // EnableDockerMCP adds Docker MCP configuration and persists it.
+// Uses copy-on-write pattern: only updates in-memory config after
+// successful persistence.
 func (s *ConfigStore) EnableDockerMCP() error {
-	mcpConfig, err := s.PrepareDockerMCPConfig()
-	if err != nil {
-		return err
+	if !IsDockerMCPAvailable() {
+		return fmt.Errorf("docker mcp is not available, please ensure docker is installed and 'docker mcp version' succeeds")
 	}
-	if err := s.PersistDockerMCPConfig(mcpConfig); err != nil {
-		return err
+
+	mcpConfig := DockerMCPConfig()
+
+	// Create a staged copy with Docker MCP added.
+	staged := make(map[string]MCPConfig, len(s.config.MCP)+1)
+	if s.config.MCP != nil {
+		for k, v := range s.config.MCP {
+			staged[k] = v
+		}
 	}
+	staged[DockerMCPName] = mcpConfig
+
+	// Persist the staged MCP map to the config file.
+	if err := s.SetConfigField(ScopeGlobal, "mcp", staged); err != nil {
+		return fmt.Errorf("failed to persist docker mcp configuration: %w", err)
+	}
+
+	// Only update in-memory config after successful persistence.
+	s.config.MCP = staged
 	return nil
 }
 
@@ -122,13 +141,20 @@ func (s *ConfigStore) DisableDockerMCP() error {
 		return nil
 	}
 
-	// Remove from in-memory config.
-	delete(s.config.MCP, DockerMCPName)
+	// Create a staged copy with Docker MCP removed.
+	staged := make(map[string]MCPConfig, len(s.config.MCP)-1)
+	for k, v := range s.config.MCP {
+		if k != DockerMCPName {
+			staged[k] = v
+		}
+	}
 
-	// Persist the updated MCP map to the config file.
-	if err := s.SetConfigField(ScopeGlobal, "mcp", s.config.MCP); err != nil {
+	// Persist the staged MCP map to the config file.
+	if err := s.SetConfigField(ScopeGlobal, "mcp", staged); err != nil {
 		return fmt.Errorf("failed to persist docker mcp removal: %w", err)
 	}
 
+	// Only update in-memory config after successful persistence.
+	s.config.MCP = staged
 	return nil
 }

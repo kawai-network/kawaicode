@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/fsext"
 )
 
@@ -31,20 +31,20 @@ type GlobResponseMetadata struct {
 	Truncated     bool `json:"truncated"`
 }
 
-func NewGlobTool(workingDir string) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewGlobTool(workingDir string) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		GlobToolName,
 		string(globDescription),
-		func(ctx context.Context, params GlobParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params GlobParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.Pattern == "" {
-				return fantasy.NewTextErrorResponse("pattern is required"), nil
+				return unillm.NewTextErrorResponse("pattern is required"), nil
 			}
 
 			searchPath := cmp.Or(params.Path, workingDir)
 
 			files, truncated, err := globFiles(ctx, params.Pattern, searchPath, 100)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error finding files: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("error finding files: %w", err)
 			}
 
 			var output string
@@ -58,8 +58,8 @@ func NewGlobTool(workingDir string) fantasy.AgentTool {
 				}
 			}
 
-			return fantasy.WithResponseMetadata(
-				fantasy.NewTextResponse(output),
+			return unillm.WithResponseMetadata(
+				unillm.NewTextResponse(output),
 				GlobResponseMetadata{
 					NumberOfFiles: len(files),
 					Truncated:     truncated,

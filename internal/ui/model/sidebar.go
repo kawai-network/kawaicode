@@ -38,6 +38,9 @@ func (m *UI) modelInfo(width int) string {
 				}
 			}
 		}
+		if providerName == "" {
+			providerName = model.ModelCfg.Provider
+		}
 	}
 
 	var modelContext *common.ModelContextInfo
@@ -48,11 +51,7 @@ func (m *UI) modelInfo(width int) string {
 			ModelContext: model.CatwalkCfg.ContextWindow,
 		}
 	}
-	var modelName string
-	if model != nil {
-		modelName = model.CatwalkCfg.Name
-	}
-	return common.ModelInfo(m.com.Styles, modelName, providerName, reasoningInfo, modelContext, width)
+	return common.ModelInfo(m.com.Styles, model.CatwalkCfg.Name, providerName, reasoningInfo, modelContext, width)
 }
 
 // getDynamicHeightLimits will give us the num of items to show in each section based on the hight
@@ -116,7 +115,7 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 	height := area.Dy()
 
 	title := t.Muted.Width(width).MaxHeight(2).Render(m.session.Title)
-	cwd := common.PrettyPath(t, m.com.Workspace.WorkingDir(), width)
+	cwd := common.PrettyPath(t, m.com.Store().WorkingDir(), width)
 	sidebarLogo := m.sidebarLogo
 	if height < logoHeightBreakpoint {
 		sidebarLogo = logo.SmallRender(m.com.Styles, width)
@@ -142,7 +141,7 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 
 	lspSection := m.lspInfo(width, maxLSPs, true)
 	mcpSection := m.mcpInfo(width, maxMCPs, true)
-	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), width, maxFiles, true)
+	filesSection := m.filesInfo(m.com.Store().WorkingDir(), width, maxFiles, true)
 
 	uv.NewStyledString(
 		lipgloss.NewStyle().

@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/session"
 )
 
@@ -33,19 +33,19 @@ type TodosResponseMetadata struct {
 	Total         int            `json:"total"`
 }
 
-func NewTodosTool(sessions session.Service) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewTodosTool(sessions session.Service) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		TodosToolName,
 		string(todosDescription),
-		func(ctx context.Context, params TodosParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params TodosParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for managing todos")
+				return unillm.ToolResponse{}, fmt.Errorf("session ID is required for managing todos")
 			}
 
 			currentSession, err := sessions.Get(ctx, sessionID)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to get session: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to get session: %w", err)
 			}
 
 			isNew := len(currentSession.Todos) == 0
@@ -58,7 +58,7 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 				switch item.Status {
 				case "pending", "in_progress", "completed":
 				default:
-					return fantasy.ToolResponse{}, fmt.Errorf("invalid status %q for todo %q", item.Status, item.Content)
+					return unillm.ToolResponse{}, fmt.Errorf("invalid status %q for todo %q", item.Status, item.Content)
 				}
 			}
 
@@ -98,7 +98,7 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 			currentSession.Todos = todos
 			_, err = sessions.Save(ctx, currentSession)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to save todos: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to save todos: %w", err)
 			}
 
 			response := "Todo list updated successfully.\n\n"
@@ -129,6 +129,6 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 				Total:         len(todos),
 			}
 
-			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
+			return unillm.WithResponseMetadata(unillm.NewTextResponse(response), metadata), nil
 		})
 }

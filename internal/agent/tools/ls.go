@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
@@ -55,14 +55,14 @@ const (
 //go:embed ls.md
 var lsDescription []byte
 
-func NewLsTool(permissions permission.Service, workingDir string, lsConfig config.ToolLs) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
+func NewLsTool(permissions permission.Service, workingDir string, lsConfig config.ToolLs) unillm.AgentTool {
+	return unillm.NewAgentTool(
 		LSToolName,
 		string(lsDescription),
-		func(ctx context.Context, params LSParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params LSParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			searchPath, err := fsext.Expand(cmp.Or(params.Path, workingDir))
 			if err != nil {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("error expanding path: %v", err)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("error expanding path: %v", err)), nil
 			}
 
 			searchPath = filepathext.SmartJoin(workingDir, searchPath)
@@ -70,12 +70,12 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 			// Check if directory is outside working directory and request permission if needed
 			absWorkingDir, err := filepath.Abs(workingDir)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("error resolving working directory: %v", err)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("error resolving working directory: %v", err)), nil
 			}
 
 			absSearchPath, err := filepath.Abs(searchPath)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("error resolving search path: %v", err)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("error resolving search path: %v", err)), nil
 			}
 
 			relPath, err := filepath.Rel(absWorkingDir, absSearchPath)
@@ -83,7 +83,7 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 				// Directory is outside working directory, request permission
 				sessionID := GetSessionFromContext(ctx)
 				if sessionID == "" {
-					return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for accessing directories outside working directory")
+					return unillm.ToolResponse{}, fmt.Errorf("session ID is required for accessing directories outside working directory")
 				}
 
 				granted, err := permissions.Request(ctx,
@@ -98,20 +98,20 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 					},
 				)
 				if err != nil {
-					return fantasy.ToolResponse{}, err
+					return unillm.ToolResponse{}, err
 				}
 				if !granted {
-					return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+					return unillm.ToolResponse{}, permission.ErrorPermissionDenied
 				}
 			}
 
 			output, metadata, err := ListDirectoryTree(searchPath, params, lsConfig)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(err.Error()), nil
+				return unillm.NewTextErrorResponse(err.Error()), nil
 			}
 
-			return fantasy.WithResponseMetadata(
-				fantasy.NewTextResponse(output),
+			return unillm.WithResponseMetadata(
+				unillm.NewTextResponse(output),
 				metadata,
 			), nil
 		})

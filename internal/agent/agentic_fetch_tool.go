@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -50,7 +50,7 @@ func validateAgenticFetchParams(ctx context.Context, params tools.AgenticFetchPa
 //go:embed templates/agentic_fetch_prompt.md.tpl
 var agenticFetchPromptTmpl []byte
 
-func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (fantasy.AgentTool, error) {
+func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (unillm.AgentTool, error) {
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.MaxIdleConns = 100
@@ -63,13 +63,13 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 		}
 	}
 
-	return fantasy.NewParallelAgentTool(
+	return unillm.NewParallelAgentTool(
 		tools.AgenticFetchToolName,
 		string(agenticFetchToolDescription),
-		func(ctx context.Context, params tools.AgenticFetchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params tools.AgenticFetchParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			validationResult, err := validateAgenticFetchParams(ctx, params)
 			if err != nil {
-				return fantasy.NewTextErrorResponse(err.Error()), nil
+				return unillm.NewTextErrorResponse(err.Error()), nil
 			}
 
 			// Determine description based on mode.
@@ -92,15 +92,15 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				},
 			)
 			if err != nil {
-				return fantasy.ToolResponse{}, err
+				return unillm.ToolResponse{}, err
 			}
 			if !p {
-				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+				return unillm.ToolResponse{}, permission.ErrorPermissionDenied
 			}
 
 			tmpDir, err := os.MkdirTemp(c.cfg.Config().Options.DataDirectory, "crush-fetch-*")
 			if err != nil {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to create temporary directory: %s", err)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("Failed to create temporary directory: %s", err)), nil
 			}
 			defer os.RemoveAll(tmpDir)
 
@@ -110,7 +110,7 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				// URL mode: fetch the URL content first.
 				content, err := tools.FetchURLAndConvert(ctx, client, params.URL)
 				if err != nil {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to fetch URL: %s", err)), nil
+					return unillm.NewTextErrorResponse(fmt.Sprintf("Failed to fetch URL: %s", err)), nil
 				}
 
 				hasLargeContent := len(content) > tools.LargeContentThreshold
@@ -118,13 +118,13 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				if hasLargeContent {
 					tempFile, err := os.CreateTemp(tmpDir, "page-*.md")
 					if err != nil {
-						return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to create temporary file: %s", err)), nil
+						return unillm.NewTextErrorResponse(fmt.Sprintf("Failed to create temporary file: %s", err)), nil
 					}
 					tempFilePath := tempFile.Name()
 
 					if _, err := tempFile.WriteString(content); err != nil {
 						tempFile.Close()
-						return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to write content to file: %s", err)), nil
+						return unillm.NewTextErrorResponse(fmt.Sprintf("Failed to write content to file: %s", err)), nil
 					}
 					tempFile.Close()
 
@@ -143,27 +143,27 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 
 			promptTemplate, err := prompt.NewPrompt("agentic_fetch", string(agenticFetchPromptTmpl), promptOpts...)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error creating prompt: %s", err)
+				return unillm.ToolResponse{}, fmt.Errorf("error creating prompt: %s", err)
 			}
 
 			_, small, err := c.buildAgentModels(ctx, true)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error building models: %s", err)
+				return unillm.ToolResponse{}, fmt.Errorf("error building models: %s", err)
 			}
 
 			systemPrompt, err := promptTemplate.Build(ctx, small.Model.Provider(), small.Model.Model(), c.cfg)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error building system prompt: %s", err)
+				return unillm.ToolResponse{}, fmt.Errorf("error building system prompt: %s", err)
 			}
 
 			smallProviderCfg, ok := c.cfg.Config().Providers.Get(small.ModelCfg.Provider)
 			if !ok {
-				return fantasy.ToolResponse{}, errors.New("small model provider not configured")
+				return unillm.ToolResponse{}, errors.New("small model provider not configured")
 			}
 
 			webFetchTool := tools.NewWebFetchTool(tmpDir, client)
 			webSearchTool := tools.NewWebSearchTool(client)
-			fetchTools := []fantasy.AgentTool{
+			fetchTools := []unillm.AgentTool{
 				webFetchTool,
 				webSearchTool,
 				tools.NewGlobTool(tmpDir),

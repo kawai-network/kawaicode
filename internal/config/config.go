@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	appName              = "crush"
-	defaultDataDirectory = ".crush"
-	defaultInitializeAs  = "AGENTS.md"
+	appName             = "crush"
+	defaultInitializeAs = "AGENTS.md"
 )
 
 var defaultContextPaths = []string{
@@ -74,8 +73,8 @@ type SelectedModel struct {
 	// Only used by models that use the openai provider and need this set.
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"description=Reasoning effort level for OpenAI models that support it,enum=low,enum=medium,enum=high"`
 
-	// Used by anthropic models that can reason to indicate if the model should think.
-	Think bool `json:"think,omitempty" jsonschema:"description=Enable thinking mode for Anthropic models that support reasoning"`
+	// Used by models that can reason to indicate if the model should think.
+	Think bool `json:"think,omitempty" jsonschema:"description=Enable thinking mode for reasoning-capable models"`
 
 	// Overrides the default model configuration.
 	MaxTokens        int64    `json:"max_tokens,omitempty" jsonschema:"description=Maximum number of tokens for model responses,maximum=200000,example=4096"`
@@ -96,8 +95,8 @@ type ProviderConfig struct {
 	Name string `json:"name,omitempty" jsonschema:"description=Human-readable name for the provider,example=OpenAI"`
 	// The provider's API endpoint.
 	BaseURL string `json:"base_url,omitempty" jsonschema:"description=Base URL for the provider's API,format=uri,example=https://api.openai.com/v1"`
-	// The provider type, e.g. "openai", "anthropic", etc. if empty it defaults to openai.
-	Type catwalk.Type `json:"type,omitempty" jsonschema:"description=Provider type that determines the API format,enum=openai,enum=openai-compat,enum=anthropic,enum=gemini,enum=azure,enum=vertexai,default=openai"`
+	// The provider type, e.g. "openai", etc. if empty it defaults to openai.
+	Type catwalk.Type `json:"type,omitempty" jsonschema:"description=Provider type that determines the API format,enum=openai,enum=openai-compat,enum=gemini,enum=vertexai,default=openai"`
 	// The provider's API key.
 	APIKey string `json:"api_key,omitempty" jsonschema:"description=API key for authentication with the provider,example=$OPENAI_API_KEY"`
 	// The original API key template before resolution (for re-resolution on auth errors).
@@ -213,7 +212,8 @@ func (c Completions) Limits() (depth, items int) {
 }
 
 type Permissions struct {
-	AllowedTools []string `json:"allowed_tools,omitempty" jsonschema:"description=List of tools that don't require permission prompts,example=bash,example=view"`
+	AllowedTools []string `json:"allowed_tools,omitempty" jsonschema:"description=List of tools that don't require permission prompts,example=bash,example=view"` // Tools that don't require permission prompts
+	SkipRequests bool     `json:"-"`                                                                                                                              // Automatically accept all permissions (YOLO mode)
 }
 
 type TrailerStyle string
@@ -246,7 +246,7 @@ type Options struct {
 	Debug                     bool         `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
 	DebugLSP                  bool         `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
 	DisableAutoSummarize      bool         `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
-	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data (relative to working directory),default=.crush,example=.crush"` // Relative to the cwd
+	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data (defaults to user data directory),example=/path/to/crush-data"`
 	DisabledTools             []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash,example=sourcegraph"`
 	DisableProviderAutoUpdate bool         `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable providers auto-update,default=false"`
 	DisableDefaultProviders   bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled, providers must be fully specified in the config file with base_url, models, and api_key - no merging with defaults occurs,default=false"`
@@ -256,7 +256,6 @@ type Options struct {
 	AutoLSP                   *bool        `json:"auto_lsp,omitempty" jsonschema:"description=Automatically setup LSPs based on root markers,default=true"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	DisableNotifications      bool         `json:"disable_notifications,omitempty" jsonschema:"description=Disable desktop notifications,default=false"`
-	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crush-config"`
 }
 
 type MCPs map[string]MCPConfig
@@ -568,31 +567,10 @@ func (c *ProviderConfig) TestConnection(resolver VariableResolver) error {
 		}
 
 		headers["Authorization"] = "Bearer " + apiKey
-	case catwalk.TypeAnthropic:
-		baseURL, _ := resolver.ResolveValue(c.BaseURL)
-		baseURL = cmp.Or(baseURL, "https://api.anthropic.com/v1")
-
-		switch providerID {
-		case catwalk.InferenceKimiCoding:
-			testURL = baseURL + "/v1/models"
-		default:
-			testURL = baseURL + "/models"
-		}
-
-		headers["x-api-key"] = apiKey
-		headers["anthropic-version"] = "2023-06-01"
 	case catwalk.TypeGoogle:
 		baseURL, _ := resolver.ResolveValue(c.BaseURL)
 		baseURL = cmp.Or(baseURL, "https://generativelanguage.googleapis.com")
 		testURL = baseURL + "/v1beta/models?key=" + url.QueryEscape(apiKey)
-	case catwalk.TypeBedrock:
-		// NOTE: Bedrock has a `/foundation-models` endpoint that we could in
-		// theory use, but apparently the authorization is region-specific,
-		// so it's not so trivial.
-		if strings.HasPrefix(apiKey, "ABSK") { // Bedrock API keys
-			return nil
-		}
-		return errors.New("not a valid bedrock api key")
 	case catwalk.TypeVercel:
 		// NOTE: Vercel does not validate API keys on the `/models` endpoint.
 		if strings.HasPrefix(apiKey, "vck_") { // Vercel API keys

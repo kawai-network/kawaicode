@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/fantasy"
+	"github.com/getkawai/unillm"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/permission"
 )
@@ -34,7 +34,7 @@ const DownloadToolName = "download"
 //go:embed download.md
 var downloadDescription []byte
 
-func NewDownloadTool(permissions permission.Service, workingDir string, client *http.Client) fantasy.AgentTool {
+func NewDownloadTool(permissions permission.Service, workingDir string, client *http.Client) unillm.AgentTool {
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.MaxIdleConns = 100
@@ -46,20 +46,20 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 			Transport: transport,
 		}
 	}
-	return fantasy.NewParallelAgentTool(
+	return unillm.NewParallelAgentTool(
 		DownloadToolName,
 		string(downloadDescription),
-		func(ctx context.Context, params DownloadParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		func(ctx context.Context, params DownloadParams, call unillm.ToolCall) (unillm.ToolResponse, error) {
 			if params.URL == "" {
-				return fantasy.NewTextErrorResponse("URL parameter is required"), nil
+				return unillm.NewTextErrorResponse("URL parameter is required"), nil
 			}
 
 			if params.FilePath == "" {
-				return fantasy.NewTextErrorResponse("file_path parameter is required"), nil
+				return unillm.NewTextErrorResponse("file_path parameter is required"), nil
 			}
 
 			if !strings.HasPrefix(params.URL, "http://") && !strings.HasPrefix(params.URL, "https://") {
-				return fantasy.NewTextErrorResponse("URL must start with http:// or https://"), nil
+				return unillm.NewTextErrorResponse("URL must start with http:// or https://"), nil
 			}
 
 			filePath := filepathext.SmartJoin(workingDir, params.FilePath)
@@ -68,7 +68,7 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for downloading files")
+				return unillm.ToolResponse{}, fmt.Errorf("session ID is required for downloading files")
 			}
 
 			p, err := permissions.Request(ctx,
@@ -82,10 +82,10 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 				},
 			)
 			if err != nil {
-				return fantasy.ToolResponse{}, err
+				return unillm.ToolResponse{}, err
 			}
 			if !p {
-				return fantasy.ToolResponse{}, permission.ErrorPermissionDenied
+				return unillm.ToolResponse{}, permission.ErrorPermissionDenied
 			}
 
 			// Handle timeout with context
@@ -102,30 +102,30 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 
 			req, err := http.NewRequestWithContext(requestCtx, "GET", params.URL, nil)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to create request: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to create request: %w", err)
 			}
 
 			req.Header.Set("User-Agent", "crush/1.0")
 
 			resp, err := client.Do(req)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to download from URL: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to download from URL: %w", err)
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
+				return unillm.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
 			}
 
 			// Create parent directories if they don't exist
 			if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to create parent directories: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to create parent directories: %w", err)
 			}
 
 			// Create the output file
 			outFile, err := os.Create(filePath)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to create output file: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to create output file: %w", err)
 			}
 			defer outFile.Close()
 
@@ -134,7 +134,7 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 			// and any upstream server limits.
 			bytesWritten, err := io.Copy(outFile, resp.Body)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
+				return unillm.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 			}
 
 			contentType := resp.Header.Get("Content-Type")
@@ -143,6 +143,6 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 				responseMsg += fmt.Sprintf(" (Content-Type: %s)", contentType)
 			}
 
-			return fantasy.NewTextResponse(responseMsg), nil
+			return unillm.NewTextResponse(responseMsg), nil
 		})
 }

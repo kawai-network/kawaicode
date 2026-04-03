@@ -4,12 +4,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
+	"github.com/kawai-network/y/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +53,7 @@ func TestConfig_setDefaults(t *testing.T) {
 	require.NotNil(t, cfg.Models)
 	require.NotNil(t, cfg.LSP)
 	require.NotNil(t, cfg.MCP)
-	require.Equal(t, filepath.Join("/tmp", ".crush"), cfg.Options.DataDirectory)
+	require.Equal(t, paths.UserDataDir(), cfg.Options.DataDirectory)
 	require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
 	for _, path := range defaultContextPaths {
 		require.Contains(t, cfg.Options.ContextPaths, path)
@@ -180,80 +180,6 @@ func TestConfig_configureProvidersWithNewProvider(t *testing.T) {
 	require.True(t, ok, "OpenAI provider should still be present")
 }
 
-func TestConfig_configureProvidersBedrockWithCredentials(t *testing.T) {
-	knownProviders := []catwalk.Provider{
-		{
-			ID:          catwalk.InferenceProviderBedrock,
-			APIKey:      "",
-			APIEndpoint: "",
-			Models: []catwalk.Model{{
-				ID: "anthropic.claude-sonnet-4-20250514-v1:0",
-			}},
-		},
-	}
-
-	cfg := &Config{}
-	cfg.setDefaults("/tmp", "")
-	env := env.NewFromMap(map[string]string{
-		"AWS_ACCESS_KEY_ID":     "test-key-id",
-		"AWS_SECRET_ACCESS_KEY": "test-secret-key",
-	})
-	resolver := NewEnvironmentVariableResolver(env)
-	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
-	require.NoError(t, err)
-	require.Equal(t, cfg.Providers.Len(), 1)
-
-	bedrockProvider, ok := cfg.Providers.Get("bedrock")
-	require.True(t, ok, "Bedrock provider should be present")
-	require.Len(t, bedrockProvider.Models, 1)
-	require.Equal(t, "anthropic.claude-sonnet-4-20250514-v1:0", bedrockProvider.Models[0].ID)
-}
-
-func TestConfig_configureProvidersBedrockWithoutCredentials(t *testing.T) {
-	knownProviders := []catwalk.Provider{
-		{
-			ID:          catwalk.InferenceProviderBedrock,
-			APIKey:      "",
-			APIEndpoint: "",
-			Models: []catwalk.Model{{
-				ID: "anthropic.claude-sonnet-4-20250514-v1:0",
-			}},
-		},
-	}
-
-	cfg := &Config{}
-	cfg.setDefaults("/tmp", "")
-	env := env.NewFromMap(map[string]string{})
-	resolver := NewEnvironmentVariableResolver(env)
-	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
-	require.NoError(t, err)
-	// Provider should not be configured without credentials
-	require.Equal(t, cfg.Providers.Len(), 0)
-}
-
-func TestConfig_configureProvidersBedrockWithoutUnsupportedModel(t *testing.T) {
-	knownProviders := []catwalk.Provider{
-		{
-			ID:          catwalk.InferenceProviderBedrock,
-			APIKey:      "",
-			APIEndpoint: "",
-			Models: []catwalk.Model{{
-				ID: "some-random-model",
-			}},
-		},
-	}
-
-	cfg := &Config{}
-	cfg.setDefaults("/tmp", "")
-	env := env.NewFromMap(map[string]string{
-		"AWS_ACCESS_KEY_ID":     "test-key-id",
-		"AWS_SECRET_ACCESS_KEY": "test-secret-key",
-	})
-	resolver := NewEnvironmentVariableResolver(env)
-	err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
-	require.Error(t, err)
-}
-
 func TestConfig_configureProvidersVertexAIWithCredentials(t *testing.T) {
 	knownProviders := []catwalk.Provider{
 		{
@@ -372,8 +298,8 @@ func TestConfig_EnabledProviders(t *testing.T) {
 					APIKey:  "key1",
 					Disable: false,
 				},
-				"anthropic": {
-					ID:      "anthropic",
+				"openrouter": {
+					ID:      "openrouter",
 					APIKey:  "key2",
 					Disable: false,
 				},
@@ -392,8 +318,8 @@ func TestConfig_EnabledProviders(t *testing.T) {
 					APIKey:  "key1",
 					Disable: false,
 				},
-				"anthropic": {
-					ID:      "anthropic",
+				"openrouter": {
+					ID:      "openrouter",
 					APIKey:  "key2",
 					Disable: true,
 				},
@@ -446,8 +372,8 @@ func TestConfig_IsConfigured(t *testing.T) {
 					APIKey:  "key1",
 					Disable: true,
 				},
-				"anthropic": {
-					ID:      "anthropic",
+				"openrouter": {
+					ID:      "openrouter",
 					APIKey:  "key2",
 					Disable: true,
 				},
@@ -679,15 +605,15 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		require.Equal(t, "https://api.custom.com/v1", customProvider.BaseURL)
 	})
 
-	t.Run("custom anthropic provider is supported", func(t *testing.T) {
+	t.Run("custom openrouter provider is supported", func(t *testing.T) {
 		cfg := &Config{
 			Providers: csync.NewMapFrom(map[string]ProviderConfig{
-				"custom-anthropic": {
+				"custom-openrouter": {
 					APIKey:  "test-key",
-					BaseURL: "https://api.anthropic.com/v1",
-					Type:    catwalk.TypeAnthropic,
+					BaseURL: "https://openrouter.ai/api/v1",
+					Type:    catwalk.TypeOpenRouter,
 					Models: []catwalk.Model{{
-						ID: "claude-3-sonnet",
+						ID: "moonshotai/kimi-k2-0905",
 					}},
 				},
 			}),
@@ -700,12 +626,12 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, cfg.Providers.Len(), 1)
-		customProvider, exists := cfg.Providers.Get("custom-anthropic")
+		customProvider, exists := cfg.Providers.Get("custom-openrouter")
 		require.True(t, exists)
-		require.Equal(t, "custom-anthropic", customProvider.ID)
+		require.Equal(t, "custom-openrouter", customProvider.ID)
 		require.Equal(t, "test-key", customProvider.APIKey)
-		require.Equal(t, "https://api.anthropic.com/v1", customProvider.BaseURL)
-		require.Equal(t, catwalk.TypeAnthropic, customProvider.Type)
+		require.Equal(t, "https://openrouter.ai/api/v1", customProvider.BaseURL)
+		require.Equal(t, catwalk.TypeOpenRouter, customProvider.Type)
 	})
 
 	t.Run("disabled custom provider is removed", func(t *testing.T) {
@@ -766,37 +692,6 @@ func TestConfig_configureProvidersEnhancedCredentialValidation(t *testing.T) {
 
 		require.Equal(t, cfg.Providers.Len(), 0)
 		_, exists := cfg.Providers.Get("vertexai")
-		require.False(t, exists)
-	})
-
-	t.Run("Bedrock provider removed when AWS credentials missing with existing config", func(t *testing.T) {
-		knownProviders := []catwalk.Provider{
-			{
-				ID:          catwalk.InferenceProviderBedrock,
-				APIKey:      "",
-				APIEndpoint: "",
-				Models: []catwalk.Model{{
-					ID: "anthropic.claude-sonnet-4-20250514-v1:0",
-				}},
-			},
-		}
-
-		cfg := &Config{
-			Providers: csync.NewMapFrom(map[string]ProviderConfig{
-				"bedrock": {
-					BaseURL: "custom-url",
-				},
-			}),
-		}
-		cfg.setDefaults("/tmp", "")
-
-		env := env.NewFromMap(map[string]string{})
-		resolver := NewEnvironmentVariableResolver(env)
-		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
-		require.NoError(t, err)
-
-		require.Equal(t, cfg.Providers.Len(), 0)
-		_, exists := cfg.Providers.Get("bedrock")
 		require.False(t, exists)
 	})
 
@@ -1199,11 +1094,11 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 				}},
 			},
 			{
-				ID:          "anthropic",
-				APIKey:      "$ANTHROPIC_API_KEY",
-				APIEndpoint: "https://api.anthropic.com/v1",
+				ID:          "openrouter",
+				APIKey:      "$OPENROUTER_API_KEY",
+				APIEndpoint: "https://openrouter.ai/api/v1",
 				Models: []catwalk.Model{{
-					ID: "claude-3",
+					ID: "moonshotai/kimi-k2-0905",
 				}},
 			},
 		}
@@ -1223,8 +1118,8 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		cfg.setDefaults("/tmp", "")
 
 		env := env.NewFromMap(map[string]string{
-			"OPENAI_API_KEY":    "test-key",
-			"ANTHROPIC_API_KEY": "test-key",
+			"OPENAI_API_KEY":     "test-key",
+			"OPENROUTER_API_KEY": "test-key",
 		})
 		resolver := NewEnvironmentVariableResolver(env)
 		err := cfg.configureProviders(testStore(cfg), env, resolver, knownProviders)
@@ -1234,8 +1129,8 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		require.Equal(t, 2, cfg.Providers.Len())
 		_, exists := cfg.Providers.Get("openai")
 		require.True(t, exists, "openai should be present")
-		_, exists = cfg.Providers.Get("anthropic")
-		require.True(t, exists, "anthropic should be present")
+		_, exists = cfg.Providers.Get("openrouter")
+		require.True(t, exists, "openrouter should be present")
 	})
 
 	t.Run("when enabled, provider missing models is rejected", func(t *testing.T) {
@@ -1377,17 +1272,17 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 				},
 			},
 			{
-				ID:                  "anthropic",
+				ID:                  "openrouter",
 				APIKey:              "abc",
-				DefaultLargeModelID: "a-large-model",
-				DefaultSmallModelID: "a-small-model",
+				DefaultLargeModelID: "r-large-model",
+				DefaultSmallModelID: "r-small-model",
 				Models: []catwalk.Model{
 					{
-						ID:               "a-large-model",
+						ID:               "r-large-model",
 						DefaultMaxTokens: 1000,
 					},
 					{
-						ID:               "a-small-model",
+						ID:               "r-small-model",
 						DefaultMaxTokens: 200,
 					},
 				},
@@ -1397,8 +1292,8 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		cfg := &Config{
 			Models: map[SelectedModelType]SelectedModel{
 				"small": {
-					Model:     "a-small-model",
-					Provider:  "anthropic",
+					Model:     "r-small-model",
+					Provider:  "openrouter",
 					MaxTokens: 300,
 				},
 			},
@@ -1416,8 +1311,8 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		require.Equal(t, "large-model", large.Model)
 		require.Equal(t, "openai", large.Provider)
 		require.Equal(t, int64(1000), large.MaxTokens)
-		require.Equal(t, "a-small-model", small.Model)
-		require.Equal(t, "anthropic", small.Provider)
+		require.Equal(t, "r-small-model", small.Model)
+		require.Equal(t, "openrouter", small.Provider)
 		require.Equal(t, int64(300), small.MaxTokens)
 	})
 

@@ -34,7 +34,6 @@ var fastIgnoreDirs = map[string]bool{
 	".Trash":          true,
 	".Spotlight-V100": true,
 	".fseventsd":      true,
-	".crush":          true,
 	"OrbStack":        true,
 	".local":          true,
 	".share":          true,
@@ -88,13 +87,27 @@ var gitGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
 	cfg, err := gitconfig.LoadConfig(gitconfig.GlobalScope)
 	if err != nil {
 		slog.Debug("Failed to load global git config", "error", err)
+		// Fall through to use default path
+	}
+
+	// Get excludes file path from config, or use default fallback.
+	// cfg may be nil if LoadConfig failed, so handle that safely.
+	// If home.Config() is empty, skip loading git global ignores.
+	cfgPath := home.Config()
+	if cfgPath == "" {
+		slog.Debug("Skipping git global ignores: home config directory not available")
 		return nil
 	}
 
-	excludesFilePath := cmp.Or(
-		cfg.Raw.Section("core").Options.Get("excludesfile"),
-		filepath.Join(home.Config(), "git", "ignore"),
-	)
+	var excludesFilePath string
+	if cfg != nil {
+		excludesFilePath = cmp.Or(
+			cfg.Raw.Section("core").Options.Get("excludesfile"),
+			filepath.Join(cfgPath, "git", "ignore"),
+		)
+	} else {
+		excludesFilePath = filepath.Join(cfgPath, "git", "ignore")
+	}
 	excludesFilePath = home.Long(excludesFilePath)
 
 	bts, err := os.ReadFile(excludesFilePath)
@@ -108,19 +121,24 @@ var gitGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
 	return parsePatterns(strings.Split(string(bts), "\n"), nil)
 })
 
-// crushGlobalIgnorePatterns returns patterns from the user's
-// ~/.config/crush/ignore file.
-var crushGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
-	name := filepath.Join(home.Config(), "crush", "ignore")
+// kawaiGlobalIgnorePatterns returns patterns from the user's
+// ~/.config/kawai/ignore file.
+var kawaiGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
+	cfgPath := home.Config()
+	if cfgPath == "" {
+		slog.Debug("Skipping kawai global ignores: home config directory not available")
+		return nil
+	}
+	name := filepath.Join(cfgPath, "kawai", "ignore")
+	name = home.Long(name)
 	bts, err := os.ReadFile(name)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			slog.Debug("Failed to read crush global ignore file", "path", name, "error", err)
+			slog.Debug("Failed to read kawai global ignore file", "path", name, "error", err)
 		}
 		return nil
 	}
-	lines := strings.Split(string(bts), "\n")
-	return parsePatterns(lines, nil)
+	return parsePatterns(strings.Split(string(bts), "\n"), nil)
 })
 
 // parsePatterns parses gitignore pattern strings into Pattern objects.
@@ -138,7 +156,7 @@ func parsePatterns(lines []string, domain []string) []gitignore.Pattern {
 }
 
 type directoryLister struct {
-	// dirPatterns caches parsed patterns from .gitignore/.crushignore for each directory.
+	// dirPatterns caches parsed patterns from .gitignore/.kawaiignore for each directory.
 	// This avoids re-reading files when building combined matchers.
 	dirPatterns *csync.Map[string, []gitignore.Pattern]
 	// combinedMatchers caches a combined matcher for each directory that includes
@@ -165,7 +183,7 @@ func pathToComponents(path string) []string {
 }
 
 // getDirPatterns returns the parsed patterns for a specific directory's
-// .gitignore and .crushignore files. Results are cached.
+// .gitignore and .kawaiignore files. Results are cached.
 func (dl *directoryLister) getDirPatterns(dir string) []gitignore.Pattern {
 	return dl.dirPatterns.GetOrSet(dir, func() []gitignore.Pattern {
 		var allPatterns []gitignore.Pattern
@@ -176,7 +194,7 @@ func (dl *directoryLister) getDirPatterns(dir string) []gitignore.Pattern {
 			domain = pathToComponents(relPath)
 		}
 
-		for _, ignoreFile := range []string{".gitignore", ".crushignore"} {
+		for _, ignoreFile := range []string{".gitignore", ".kawaiignore"} {
 			ignPath := filepath.Join(dir, ignoreFile)
 			if content, err := os.ReadFile(ignPath); err == nil {
 				lines := strings.Split(string(content), "\n")
@@ -197,9 +215,9 @@ func (dl *directoryLister) getCombinedMatcher(dir string) gitignore.Matcher {
 		// Add common patterns first (lowest priority).
 		allPatterns = append(allPatterns, commonIgnorePatterns()...)
 
-		// Add global ignore patterns (git core.excludesFile + crush global ignore).
+		// Add global ignore patterns (git core.excludesFile + kawai global ignore).
 		allPatterns = append(allPatterns, gitGlobalIgnorePatterns()...)
-		allPatterns = append(allPatterns, crushGlobalIgnorePatterns()...)
+		allPatterns = append(allPatterns, kawaiGlobalIgnorePatterns()...)
 
 		// Collect patterns from root to this directory.
 		relDir, _ := filepath.Rel(dl.rootPath, dir)
