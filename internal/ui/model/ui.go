@@ -273,8 +273,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
 	ta.SetVirtualCursor(false)
-	ta.DynamicHeight = true
-	ta.MinHeight = TextareaMinHeight
 	ta.MaxHeight = TextareaMaxHeight
 	ta.Focus()
 
@@ -2421,6 +2419,7 @@ func (m *UI) updateLayoutAndSize() {
 // the view scrolled to the bottom. The returned command, if non-nil, must be
 // batched by the caller.
 func (m *UI) handleTextareaHeightChange(prevHeight int) tea.Cmd {
+	m.syncPromptTextareaHeight()
 	if m.textarea.Height() == prevHeight {
 		return nil
 	}
@@ -2459,6 +2458,7 @@ func (m *UI) updateSize() {
 	m.chat.SetSize(m.layout.main.Dx(), m.layout.main.Dy())
 	m.textarea.MaxHeight = TextareaMaxHeight
 	m.textarea.SetWidth(m.layout.editor.Dx())
+	m.syncPromptTextareaHeight()
 	m.renderPills()
 
 	// Handle different app states
@@ -2650,7 +2650,7 @@ func (m *UI) openEditor(value string) tea.Cmd {
 	}
 	tmpPath := tmpfile.Name()
 	defer os.Remove(tmpPath) // Ensure temp file is cleaned up on all paths
-	defer tmpfile.Close() //nolint:errcheck
+	defer tmpfile.Close()    //nolint:errcheck
 	if _, err := tmpfile.WriteString(value); err != nil {
 		return util.ReportError(err)
 	}
