@@ -1,4 +1,4 @@
-// Package logo renders a Crush wordmark in a stylized way.
+// Package logo renders a KawaiCode wordmark in a stylized way.
 package logo
 
 import (
@@ -19,7 +19,7 @@ type letterform func(bool) string
 
 const diag = `╱`
 
-// Opts are the options for rendering the Crush title art.
+// Opts are the options for rendering the KawaiCode title art.
 type Opts struct {
 	FieldColor   color.Color // diagonal lines
 	TitleColorA  color.Color // left gradient ramp point
@@ -29,7 +29,7 @@ type Opts struct {
 	Width        int         // width of the rendered logo, used for truncation
 }
 
-// Render renders the Crush logo. Set the argument to true to render the narrow
+// Render renders the KawaiCode logo. Set the argument to true to render the narrow
 // version, intended for use in a sidebar.
 //
 // The compact argument determines whether it renders compact for the sidebar
@@ -44,42 +44,46 @@ func Render(s *styles.Styles, version string, compact bool, o Opts) string {
 	// Title.
 	const spacing = 1
 	letterforms := []letterform{
+		letterK,
+		letterA,
+		letterW,
+		letterA,
+		letterI,
 		letterC,
-		letterR,
-		letterU,
-		letterSStylized,
-		letterH,
+		letterO,
+		letterD,
+		letterE,
 	}
 	stretchIndex := -1 // -1 means no stretching.
 	if !compact {
 		stretchIndex = cachedRandN(len(letterforms))
 	}
 
-	crush := renderWord(spacing, stretchIndex, letterforms...)
-	crushWidth := lipgloss.Width(crush)
+	kawaicode := renderWord(spacing, stretchIndex, letterforms...)
+	kawaicodeWidth := lipgloss.Width(kawaicode)
 	b := new(strings.Builder)
-	for r := range strings.SplitSeq(crush, "\n") {
+	for r := range strings.SplitSeq(kawaicode, "\n") {
 		fmt.Fprintln(b, styles.ApplyForegroundGrad(s, r, o.TitleColorA, o.TitleColorB))
 	}
-	crush = b.String()
+	kawaicode = b.String()
 
 	// Charm and version.
 	metaRowGap := 1
-	maxVersionWidth := crushWidth - lipgloss.Width(charm) - metaRowGap
+	maxVersionWidth := kawaicodeWidth - lipgloss.Width(charm) - metaRowGap
 	version = ansi.Truncate(version, maxVersionWidth, "…") // truncate version if too long.
-	gap := max(0, crushWidth-lipgloss.Width(charm)-lipgloss.Width(version))
+	gap := max(0, kawaicodeWidth-lipgloss.Width(charm)-lipgloss.Width(version))
 	metaRow := fg(o.CharmColor, charm) + strings.Repeat(" ", gap) + fg(o.VersionColor, version)
 
-	// Join the meta row and big Crush title.
-	crush = strings.TrimSpace(metaRow + "\n" + crush)
+	// Join the meta row and big KawaiCode title.
+	kawaicode = strings.TrimSpace(metaRow + "\n" + kawaicode)
 
 	// Narrow version.
 	if compact {
-		field := fg(o.FieldColor, strings.Repeat(diag, crushWidth))
-		return strings.Join([]string{field, field, crush, field, ""}, "\n")
+		field := fg(o.FieldColor, strings.Repeat(diag, kawaicodeWidth))
+		return strings.Join([]string{field, field, kawaicode, field, ""}, "\n")
 	}
 
-	fieldHeight := lipgloss.Height(crush)
+	fieldHeight := lipgloss.Height(kawaicode)
 
 	// Left field.
 	const leftWidth = 6
@@ -90,7 +94,7 @@ func Render(s *styles.Styles, version string, compact bool, o Opts) string {
 	}
 
 	// Right field.
-	rightWidth := max(15, o.Width-crushWidth-leftWidth-2) // 2 for the gap.
+	rightWidth := max(15, o.Width-kawaicodeWidth-leftWidth-2) // 2 for the gap.
 	const stepDownAt = 0
 	rightField := new(strings.Builder)
 	for i := range fieldHeight {
@@ -103,7 +107,7 @@ func Render(s *styles.Styles, version string, compact bool, o Opts) string {
 
 	// Return the wide version.
 	const hGap = " "
-	logo := lipgloss.JoinHorizontal(lipgloss.Top, leftField.String(), hGap, crush, hGap, rightField.String())
+	logo := lipgloss.JoinHorizontal(lipgloss.Top, leftField.String(), hGap, kawaicode, hGap, rightField.String())
 	if o.Width > 0 {
 		// Truncate the logo to the specified width.
 		lines := strings.Split(logo, "\n")
@@ -115,12 +119,12 @@ func Render(s *styles.Styles, version string, compact bool, o Opts) string {
 	return logo
 }
 
-// SmallRender renders a smaller version of the Crush logo, suitable for
+// SmallRender renders a smaller version of the KawaiCode logo, suitable for
 // smaller windows or sidebar usage.
 func SmallRender(t *styles.Styles, width int) string {
 	title := t.Base.Foreground(t.Secondary).Render("Charm™")
-	title = fmt.Sprintf("%s %s", title, styles.ApplyBoldForegroundGrad(t, "Crush", t.Secondary, t.Primary))
-	remainingWidth := width - lipgloss.Width(title) - 1 // 1 for the space after "Crush"
+	title = fmt.Sprintf("%s %s", title, styles.ApplyBoldForegroundGrad(t, "KawaiCode", t.Secondary, t.Primary))
+	remainingWidth := width - lipgloss.Width(title) - 1 // 1 for the space after "KawaiCode"
 	if remainingWidth > 0 {
 		lines := strings.Repeat("╱", remainingWidth)
 		title = fmt.Sprintf("%s %s", title, t.Base.Foreground(t.Primary).Render(lines))
@@ -311,6 +315,241 @@ func letterU(stretch bool) string {
 			maxStretch: 12,
 		}),
 		side,
+	)
+}
+
+func letterK(stretch bool) string {
+	// Here's what we're making:
+	//
+	// █▄  ▄█
+	// ██▀▀██
+	// ▀   ▀
+
+	left := heredoc.Doc(`
+		█
+		█
+		▀
+	`)
+	center := heredoc.Doc(`
+		▄
+
+	`)
+	right := heredoc.Doc(`
+		█
+		█
+		▀
+	`)
+	return joinLetterform(
+		left,
+		stretchLetterformPart(center, letterformProps{
+			stretch:    stretch,
+			width:      2,
+			minStretch: 5,
+			maxStretch: 10,
+		}),
+		right,
+	)
+}
+
+func letterA(stretch bool) string {
+	// Here's what we're making:
+	//
+	//  ▄▀▀▀▄
+	// █▀▀▀▀▀█
+	// ▀     ▀
+
+	left := heredoc.Doc(`
+
+		█
+		▀
+	`)
+	center := heredoc.Doc(`
+		▄
+		▀
+	`)
+	right := heredoc.Doc(`
+
+		█
+		▀
+	`)
+	return joinLetterform(
+		left,
+		stretchLetterformPart(center, letterformProps{
+			stretch:    stretch,
+			width:      5,
+			minStretch: 7,
+			maxStretch: 12,
+		}),
+		right,
+	)
+}
+
+func letterW(stretch bool) string {
+	// Here's what we're making:
+	//
+	// █     █
+	// █▀▄ ▄▀█
+	// ▀   ▀
+
+	side := heredoc.Doc(`
+		█
+		█
+		▀
+	`)
+	center := heredoc.Doc(`
+
+		▀
+	`)
+	return joinLetterform(
+		side,
+		stretchLetterformPart(center, letterformProps{
+			stretch:    stretch,
+			width:      3,
+			minStretch: 7,
+			maxStretch: 12,
+		}),
+		side,
+	)
+}
+
+func letterI(stretch bool) string {
+	// Here's what we're making:
+	//
+	// ▀▀▀
+	// █
+	// ▀▀▀
+
+	top := heredoc.Doc(`
+		▀
+	`)
+	middle := heredoc.Doc(`
+		█
+	`)
+	bottom := heredoc.Doc(`
+		▀
+	`)
+	return joinLetterform(
+		stretchLetterformPart(top, letterformProps{
+			stretch:    stretch,
+			width:      3,
+			minStretch: 5,
+			maxStretch: 8,
+		}),
+		middle,
+		stretchLetterformPart(bottom, letterformProps{
+			stretch:    stretch,
+			width:      3,
+			minStretch: 5,
+			maxStretch: 8,
+		}),
+	)
+}
+
+func letterO(stretch bool) string {
+	// Here's what we're making:
+	//
+	// ▄▀▀▀▀▄
+	// █    █
+	// ▀▄▄▄▄▀
+
+	left := heredoc.Doc(`
+		▄
+		█
+		▀
+	`)
+	center := heredoc.Doc(`
+		▀
+
+
+		▄
+	`)
+	right := heredoc.Doc(`
+		▄
+		█
+		▀
+	`)
+	return joinLetterform(
+		left,
+		stretchLetterformPart(center, letterformProps{
+			stretch:    stretch,
+			width:      4,
+			minStretch: 7,
+			maxStretch: 12,
+		}),
+		right,
+	)
+}
+
+func letterD(stretch bool) string {
+	// Here's what we're making:
+	//
+	// █▀▀▀▄
+	// █   █
+	// ▀▄▄▄▀
+
+	left := heredoc.Doc(`
+		█
+		█
+		▀
+	`)
+	center := heredoc.Doc(`
+		▀
+
+
+		▄
+	`)
+	right := heredoc.Doc(`
+		▄
+		█
+		▀
+	`)
+	return joinLetterform(
+		left,
+		stretchLetterformPart(center, letterformProps{
+			stretch:    stretch,
+			width:      3,
+			minStretch: 6,
+			maxStretch: 10,
+		}),
+		right,
+	)
+}
+
+func letterE(stretch bool) string {
+	// Here's what we're making:
+	//
+	// ▄▀▀▀▀
+	// █▀▀▀
+	// ▀▄▄▄
+
+	top := heredoc.Doc(`
+		▄
+	`)
+	middle := heredoc.Doc(`
+		█
+	`)
+	bottom := heredoc.Doc(`
+		▀
+	`)
+	return joinLetterform(
+		stretchLetterformPart(top, letterformProps{
+			stretch:    stretch,
+			width:      5,
+			minStretch: 7,
+			maxStretch: 12,
+		}),
+		stretchLetterformPart(middle, letterformProps{
+			stretch:    stretch,
+			width:      4,
+			minStretch: 6,
+			maxStretch: 10,
+		}),
+		stretchLetterformPart(bottom, letterformProps{
+			stretch:    stretch,
+			width:      4,
+			minStretch: 6,
+			maxStretch: 10,
+		}),
 	)
 }
 
