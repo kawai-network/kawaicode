@@ -41,10 +41,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -77,7 +77,7 @@ jobs:
           sha256sum "kawaicode-build-${BUILD_REF}-linux-amd64.tar.gz" > "checksums-linux-amd64.txt"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-build-amd64
           retention-days: 30
@@ -91,10 +91,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -122,7 +122,7 @@ jobs:
           shasum -a 256 "kawaicode-build-${BUILD_REF}-darwin-arm64.tar.gz" > "checksums-darwin-arm64.txt"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: darwin-build-arm64
           retention-days: 30
@@ -136,10 +136,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -173,7 +173,7 @@ jobs:
           Get-FileHash -Algorithm SHA256 $ARCHIVE | ForEach-Object { "$($_.Hash.ToLower())  $((Split-Path -Leaf $_.Path))" } | Out-File -Encoding ASCII checksums-windows-amd64.txt
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-build
           retention-days: 30
@@ -209,7 +209,7 @@ jobs:
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
 
       - name: Download Linux build artifacts
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v20
         with:
           github_token: ${{ secrets.GH_TOKEN }}
           run_id: ${{ steps.resolve_run.outputs.run_id }}
@@ -217,7 +217,7 @@ jobs:
           path: artifacts/linux
 
       - name: Download macOS build artifacts
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v20
         with:
           github_token: ${{ secrets.GH_TOKEN }}
           run_id: ${{ steps.resolve_run.outputs.run_id }}
@@ -225,7 +225,7 @@ jobs:
           path: artifacts/darwin
 
       - name: Download Windows build artifacts
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v20
         with:
           github_token: ${{ secrets.GH_TOKEN }}
           run_id: ${{ steps.resolve_run.outputs.run_id }}
@@ -249,7 +249,7 @@ jobs:
           )
 
       - name: Create draft release and upload assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.version }}
           name: kawaicode v${{ inputs.version }}
